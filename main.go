@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
+	"strings"	
 	"sync"
 	"time"
 )
@@ -22,8 +22,8 @@ const (
 	cacheFilename    = "vt_cache.json"
 	maliciousOutFile = "malicious.txt"
 	suspiciousOutFile= "suspicious.txt"
-	apiBaseURL       = "https://www.virustotal.com/api/v3/ip_addresses/"
-)
+	apiBaseURL = "https://www.virustotal.com/api/v3/"
+	)
 
 // cachedResult stores parsed vendors for an IP and when it was queried
 type cachedResult struct {
@@ -172,9 +172,74 @@ func parseAnalysis(body json.RawMessage) (malicious []string, suspicious []strin
 	return malicious, suspicious, nil
 }
 
+func parseVTAPIQuota(body json.RawMessage) (int, int, error) {
+	var root map[string]interface{}
+	if err := json.Unmarshal(body, &root); err != nil {
+		return 0,0, err
+	}
+	data, ok := root["data"].(map[string]interface{})
+	if !ok {
+		return 0,0, fmt.Errorf("unexpected response: no data")
+	}
+	
+	// parse total usage 
+	totalMap, ok := data["total"].(map[string]interface{})
+	if !ok {
+		return 0,0, fmt.Errorf("unexpected response: missing total")
+	}
+	totalVal, ok := totalMap["/api/v3/(ip_addresses)"].(float64)
+	if !ok {
+		return 0,0, fmt.Errorf("unexpected response: total[ip_addresses] not found or not number")
+	}
+
+	// parse today's usage
+	todayKey := time.Now().Format("2006-01-02")
+	dailyMap, ok := data["daily"].(map[string]interface{})
+	if !ok {
+		return int(totalVal), 0, fmt.Errorf("unexpected response: missing daily")
+	}
+	
+	var todayVal float64
+	if todayEntry, exists := dailyMap[todayKey]; exists {
+		if entryMap, ok := todayEntry.(map[string]interface{}); ok {
+			if v, ok :=entryMap["/api/v3/(ip_addresses)"].(float64); ok {
+				todayVal = v
+			}
+		}
+	}
+
+	return int(totalVal), int(todayVal), nil
+}
+
+func checkVTAPIQuota(client *http.Client, apiKey string) (json.RawMessage, error){
+	req, err := http.NewRequest("GET", apiBaseURL+"users/"+apiKey+"/api_usage", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("x-apikey", apiKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("vt returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+	return json.RawMessage(bodyBytes), nil
+}
+
 // queryVT queries VirusTotal v3 for an IP and returns the raw JSON response
 func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, error) {
-	req, err := http.NewRequest("GET", apiBaseURL+ip, nil)
+	req, err := http.NewRequest("GET", apiBaseURL+"ip_addresses/"+ip, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -233,6 +298,12 @@ func main() {
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
+	
+	//Check Available Virustotal quota
+	vtQuota, err := checkVTAPIQuota(client, apiKey)
+	quotaTotal, quotaToday, err := parseVTAPIQuota(vtQuota)
+	fmt.Printf("[*] Total VirusTotal Quota: %d out of 15k\n", quotaTotal)
+	fmt.Printf("[*] Used request: %d / 500 daily\n", quotaToday) 
 
 	ticker := time.NewTicker(*intervalFlag)
 	defer ticker.Stop()
@@ -291,8 +362,7 @@ func main() {
 
 		// write outputs & update cache
 		mu.Lock()
-		cache[ip] = cr
-
+		cache[ip] = cr	
 		// Append to malicious/suspicious files if vendors exist
 		if len(malicious) > 0 {
 			for _, v := range malicious {
