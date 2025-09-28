@@ -441,21 +441,23 @@ func main() {
 			fmt.Printf("[clean] %s\n", ip)
 		}
 	}
-
+	fmt.Println("")
 	fmt.Println("[*] Summary results")
+	fmt.Println("")
 	fmt.Printf("[>] Malicious: %d\n", len(maliciousTemp))
 	for _, maliciousIp := range maliciousTemp {
 		fmt.Printf("%s ", maliciousIp)
 	}
+	fmt.Println("")
 	fmt.Printf("[>] Suspicious: %d\n", len(suspiciousTemp))
 	for _, suspiciousIp := range suspiciousTemp {
 		fmt.Printf("%s ", suspiciousIp)
 	}
+	fmt.Println("")
 	fmt.Printf("[>] Clean: %d\n", len(cleanTemp))
 	for _, cleanIp := range cleanTemp {
 		fmt.Printf("%s ", cleanIp)
 	}
-
+	fmt.Println("")
 	fmt.Println("[>] Done. requests made:", requestsDone)
 }
-
