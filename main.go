@@ -274,6 +274,11 @@ func main() {
 	suspFile := flag.String("susp", suspiciousOutFile, "suspicious output file")
 	flag.Parse()
 
+	// temporary result for display
+	var suspiciousTemp = []string{}
+	var maliciousTemp = []string{}
+	var cleanTemp = []string{}
+
 	apiKey := os.Getenv("VIRUSTOTAL_API_KEY")
 	if apiKey == "" {
 		fmt.Fprintln(os.Stderr, "error: VIRUSTOTAL_API_KEY env var not set")
@@ -367,6 +372,7 @@ func main() {
 		if len(malicious) > 0 {
 			for _, v := range malicious {
 				line := fmt.Sprintf("%s %s", ip, v)
+				maliciousTemp = append(maliciousTemp, ip)
 				if err := appendLine(*malFile, line); err != nil {
 					fmt.Fprintf(os.Stderr, "[err] writing malicious file: %v\n", err)
 				}
@@ -375,11 +381,17 @@ func main() {
 		if len(suspicious) > 0 {
 			for _, v := range suspicious {
 				line := fmt.Sprintf("%s %s", ip, v)
+				suspiciousTemp = append(suspiciousTemp, ip)
 				if err := appendLine(*suspFile, line); err != nil {
 					fmt.Fprintf(os.Stderr, "[err] writing suspicious file: %v\n", err)
 				}
 			}
 		}
+
+		if len(malicious) == 0 && len(suspicious) == 0 {
+			cleanTemp = append(cleanTemp, ip)
+		}
+
 		// persist cache after every write (safe but slightly slower)
 		if err := saveCache(*cacheFlag, cache); err != nil {
 			fmt.Fprintf(os.Stderr, "[err] saving cache: %v\n", err)
@@ -394,8 +406,23 @@ func main() {
 		} else {
 			fmt.Printf("[clean] %s\n", ip)
 		}
+		:391
 	}
 
-	fmt.Println("done. requests:", requestsDone)
+	fmt.Println("[*] Summary results")
+	fmt.Printf("[>] Malicious: %d\n", len(maliciousTemp))
+	for _, maliciousIp := range maliciousTemp {
+		fmt.Printf("%s ", maliciousIp)
+	}
+	fmt.Printf("[>] Suspicious: %d\n", len(suspiciousTemp))
+	for _, suspiciousIp := range suspiciousTemp {
+		fmt.Printf("%s ", suspiciousIp)
+	}
+	fmt.Printf("[>] Clean: %d\n", len(cleanTemp))
+	for _, cleanIp := range cleanTemp {
+		fmt.Printf("%s ", cleanIp)
+	}
+
+	fmt.Println("[>] Done. requests made:", requestsDone)
 }
 
