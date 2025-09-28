@@ -136,6 +136,34 @@ func appendLine(path string, line string) error {
 	return err
 }
 
+func isPrivateIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+
+	privateBlocks := []*net.IPNet{
+		// IPv4 private range
+		{IP: net.IPv4(10,0,0,0), Mask: net.CIDRMask(8,32)},
+		{IP: net.IPv4(172,16,0,0), Mask: net.CIDRMask(12,32)},
+		{IP: net.IPv4(192,168,0,0), Mask: net.CIDRMask(16,32)},
+		// IPv6 unique local
+		{IP: net.ParseIP("fc00::"), Mask: net.CIDRMask(7,128)},
+		// IPv6 link-local
+		{IP: net.ParseIP("fe80::"), Mask: net.CIDRMask(10,128)},
+	}
+
+	// Check private ranges
+	for _, block := range privateBlocks {
+		if block.Contains(ip) {
+			return true
+		}
+	}
+	
+	// also skip loopback and unspecified
+	return ip.IsLoopback() || ip.IsUnspecified()
+}
+
 // parseAnalysis inspects the JSON response from VT and returns vendor lists
 func parseAnalysis(body json.RawMessage) (malicious []string, suspicious []string, err error) {
 	// Response structure: data.attributes.last_analysis_results.{vendor}.{category, result}
@@ -317,6 +345,12 @@ func main() {
 	requestsDone := 0
 
 	for _, ip := range ips {
+		// Skip private IPs 
+		if isPrivateIP(ip) {
+			fmt.Printf("[skip] private/internal IP: %s\n", ip)
+			continue
+		}
+
 		// Check daily cap
 		if requestsDone >= *dailyFlag {
 			fmt.Fprintf(os.Stderr, "daily cap reached (%d requests). stopping.\n", *dailyFlag)
@@ -406,7 +440,6 @@ func main() {
 		} else {
 			fmt.Printf("[clean] %s\n", ip)
 		}
-		:391
 	}
 
 	fmt.Println("[*] Summary results")
