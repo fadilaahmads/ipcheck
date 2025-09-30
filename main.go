@@ -22,7 +22,8 @@ const (
 	cacheFilename    = "vt_cache.json"
 	maliciousOutFile = "malicious.txt"
 	suspiciousOutFile= "suspicious.txt"
-	apiBaseURL = "https://www.virustotal.com/api/v3/"
+	virustotalApiBaseURL = "https://www.virustotal.com/api/v3/"
+  abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2/check"
 	)
 
 // cachedResult stores parsed vendors for an IP and when it was queried
@@ -240,7 +241,7 @@ func parseVTAPIQuota(body json.RawMessage) (int, int, error) {
 }
 
 func checkVTAPIQuota(client *http.Client, apiKey string) (json.RawMessage, error){
-	req, err := http.NewRequest("GET", apiBaseURL+"users/"+apiKey+"/api_usage", nil)
+	req, err := http.NewRequest("GET", virustotalAPIBaseURL+"users/"+apiKey+"/api_usage", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +268,7 @@ func checkVTAPIQuota(client *http.Client, apiKey string) (json.RawMessage, error
 
 // queryVT queries VirusTotal v3 for an IP and returns the raw JSON response
 func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, error) {
-	req, err := http.NewRequest("GET", apiBaseURL+"ip_addresses/"+ip, nil)
+	req, err := http.NewRequest("GET", virustotalAPIBaseURL+"ip_addresses/"+ip, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -290,6 +291,10 @@ func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, er
 		return nil, fmt.Errorf("vt returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 	return json.RawMessage(bodyBytes), nil
+}
+
+func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (json.RawMessage, error) {
+
 }
 
 func main() {
