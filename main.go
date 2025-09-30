@@ -294,16 +294,16 @@ func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, er
 }
 
 func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (json.RawMessage, error) {
-  req, err := http.NewRequest("GET", abuseipdbApiBaseUrl+"/check")
+  req, err := http.NewRequest("GET", abuseipdbApiBaseUrl+"/check", nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Key", apiKey)
-	req.Header.Set("application/json")
+	req.Header.Set("Accept","application/json")
 
-	data.Set("ipAddress", ip)
-	data.Set("verbose",)
-	data.Set("maxAgeInDays",90)
+	req.Header.Set("ipAddress", ip)
+	// req.Header.Set("verbose",nil)
+	req.Header.Set("maxAgeInDays","90")
 	
 	resp, err := client.Do(req)
 	if err != nil {
@@ -318,7 +318,7 @@ func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (json.RawMess
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return nil, fmt.Errorf("rate limited: %s", string(bodyBytes))
 	}
-	if resp.StatusCode < 200 || resp.StatusCOde >= 300 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("AbuseIPDB returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 	return json.RawMessage(bodyBytes), nil
