@@ -18,11 +18,11 @@ import (
 // Configurable defaults
 const (
 	defaultInterval  = 15 * time.Second // 4 req / minute => 1 every 15s
-	defaultDailyCap  = 500
+	defaultDailyCap  = 50
 	cacheFilename    = "vt_cache.json"
 	maliciousOutFile = "malicious.txt"
 	suspiciousOutFile= "suspicious.txt"
-	virustotalApiBaseURL = "https://www.virustotal.com/api/v3/"
+	virustotalApiBaseUrl = "https://www.virustotal.com/api/v3/"
   abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2/check"
 	)
 
@@ -241,7 +241,7 @@ func parseVTAPIQuota(body json.RawMessage) (int, int, error) {
 }
 
 func checkVTAPIQuota(client *http.Client, apiKey string) (json.RawMessage, error){
-	req, err := http.NewRequest("GET", virustotalAPIBaseURL+"users/"+apiKey+"/api_usage", nil)
+	req, err := http.NewRequest("GET", virustotalApiBaseUrl+"users/"+apiKey+"/api_usage", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func checkVTAPIQuota(client *http.Client, apiKey string) (json.RawMessage, error
 
 // queryVT queries VirusTotal v3 for an IP and returns the raw JSON response
 func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, error) {
-	req, err := http.NewRequest("GET", virustotalAPIBaseURL+"ip_addresses/"+ip, nil)
+	req, err := http.NewRequest("GET", virustotalApiBaseUrl+"ip_addresses/"+ip, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,34 @@ func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, er
 }
 
 func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (json.RawMessage, error) {
+  req, err := http.NewRequest("GET", abuseipdbApiBaseUrl+"/check")
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Key", apiKey)
+	req.Header.Set("application/json")
 
+	data.Set("ipAddress", ip)
+	data.Set("verbose",)
+	data.Set("maxAgeInDays",90)
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+  if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("rate limited: %s", string(bodyBytes))
+	}
+	if resp.StatusCode < 200 || resp.StatusCOde >= 300 {
+		return nil, fmt.Errorf("AbuseIPDB returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+	return json.RawMessage(bodyBytes), nil
 }
 
 func main() {
