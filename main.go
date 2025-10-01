@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"	
@@ -21,14 +22,14 @@ import (
 const (
 	defaultInterval  = 15 * time.Second // 4 req / minute => 1 every 15s
 	defaultDailyCap  = 50
-	cacheFilename    = "vt_cache.json"
+	cacheFilename    = "threat_intel_cache.json"
 	maliciousOutFile = "malicious.txt"
-	suspiciousOutFile= "suspicious.txt"
+	suspiciousOutFile= "suspicious.txt"	
 	virustotalApiBaseUrl = "https://www.virustotal.com/api/v3/"
-  abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2/check"
+  abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2/"
 	)
 
-type cacheMap map[string]models.CachedResult
+type cacheMap map[string]models.EnhanchedCachedResult
 
 // readLines reads lines from a file or stdin and returns deduplicated IPs
 func readLinesFromFileOrStdin(filename string) ([]string, error) {
@@ -286,55 +287,102 @@ func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, er
 	return json.RawMessage(bodyBytes), nil
 }
 
-func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (json.RawMessage, error) {
-  req, err := http.NewRequest("GET", abuseipdbApiBaseUrl+"/check", nil)
+// ============================================================================
+// AbuseIPDB Functions
+// ============================================================================
+
+func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (*AbuseCheckData, error){
+	params := url.Values{}
+	params.Add("ipAddress", ip)
+	params.Add("maxAgeInDays", "90")
+	params.Add("verbose", "")
+
+	req, err := http.NewRequest("GET", abuseipdbApiBaseUrl+"/check?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Key", apiKey)
-	req.Header.Set("Accept","application/json")
 
-	req.Header.Set("ipAddress", ip)
-	// req.Header.Set("verbose",nil)
-	req.Header.Set("maxAgeInDays","90")
-	
+	req.Header.Set("Key", apiKey)
+	req.Header.Set("Accept", "application/json")
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
+
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
-  if err != nil {
+	if err != nil {
 		return nil, err
 	}
+
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return nil, fmt.Errorf("rate limited: %s", string(bodyBytes))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("AbuseIPDB returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
-	return json.RawMessage(bodyBytes), nil
+
+	var checkResp models.AbuseCheckResponse
+	if err := json.Unmarshal(bodyBytes, &checkResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &checkResp.Data
+}
+
+// ============================================================================
+// Risk Assessment Logic
+// ============================================================================
+
+func calculateRiskLevel(result *models.EnhancedCachedResult) {
+	// Virustotal score: each malicious vendor = 15 points, suspicious = 5 points
+	vtScore := len(result.VTMaliciousBy) * 15
+	if len(result.VTSuspiciousBy) > 0 {
+		vtScore += len(result.VTSuspiciousBy) * 5 
+	}
+	if vtScore > 100 {
+		vtScore = 100
+	}
+
+	// Combined score (weighted average: Virustotal 40%, AbuseIPDB 60%)
+	combinedScore := int(float64(vtScore)*0.4 + float64(result.AbuseScore)*0.6)
+
+	// Decission Logic
+	switch  {
+	case combinedScore >= 75 || result.AbuseIsTor || len(result.VTMaliciousBy) >= 5:
+		result.RiskLevel = "HIGH"
+		result.ShouldBlock = true
+	case combinedScore >= 40 || len(result.VTMaliciousBy) >= 2 || result.AbuseScore >= 50:
+		result.RiskLevel = "MEDIUM"
+		result.ShouldBlock = false // perlu review manual
+	default:
+		result.RiskLevel = "LOW"
+		result.ShouldBlock = false
+	}
 }
 
 func main() {
 	// flags
 	fileFlag := flag.String("file", "", "path to file with IPs (one per line). If empty, reads from stdin")
-	intervalFlag := flag.Duration("interval", defaultInterval, "interval between requests (for rate limiting). default 15s -> 4 req/min")
+	intervalFlag := flag.Duration("interval", defaultInterval, "interval between requests. default 15s -> 4 req/min")
 	dailyFlag := flag.Int("daily", defaultDailyCap, "daily request cap (per run). default 500")
 	cacheFlag := flag.String("cache", cacheFilename, "path to cache json file")
 	malFile := flag.String("mal", maliciousOutFile, "malicious output file")
 	suspFile := flag.String("susp", suspiciousOutFile, "suspicious output file")
+	providerFlag := flag.String("provider", "both", "threat intel provider: vt, abuse, or both")
 	flag.Parse()
 
-	// temporary result for display
-	var suspiciousTemp = []string{}
-	var maliciousTemp = []string{}
-	var cleanTemp = []string{}
+  // Get API keys	
+	vtAPIKey := os.Getenv("VIRUSTOTAL_API_KEY")
+	abuseipdbAPIKey := os.Getenv("ABUSEIPDB_API_KEY")
 
-	apiKey := os.Getenv("VIRUSTOTAL_API_KEY")
-	if apiKey == "" {
-		fmt.Fprintln(os.Stderr, "error: VIRUSTOTAL_API_KEY env var not set")
+	useVT := (*providerFlag == "vt" || *providerFlag == "both") && vtAPIKey != ""
+	useAbuse := (*providerFlag == "abuse" || *providerFlag == "both") && abuseipdbAPIKey != ""
+
+	if !useVT && !useAbuse {
+		fmt.Fprintln(os.Stderr, "error: no API keys Set. Set VIRUSTOTAL_API_KEY and/or ABUSEIPDB_API_KEY")
 		os.Exit(1)
 	}
 
@@ -356,18 +404,18 @@ func main() {
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	
-	//Check Available Virustotal quota
-	vtQuota, err := checkVTAPIQuota(client, apiKey)
-	quotaTotal, quotaToday, err := parseVTAPIQuota(vtQuota)
-	fmt.Printf("[*] Total VirusTotal Quota: %d out of 15k\n", quotaTotal)
-	fmt.Printf("[*] Used request: %d / 500 daily\n", quotaToday) 
-
+		
 	ticker := time.NewTicker(*intervalFlag)
 	defer ticker.Stop()
 
 	var mu sync.Mutex // protects cache and counters and file writes
 	requestsDone := 0
+
+	// Result tracking
+	var highRisk, mediumRisk, lowRisk []string
+	fmt.Printf("[*] Starting threat inelligence scan\n")
+	fmt.Printf("[*] Providers: VT: %v, AbuseIPDB=%v", useVT, useAbuse)
+	fmt.Printf("[*] Processing %d IPs\n\n", len(ips))
 
 	for _, ip := range ips {
 		// Skip private IPs 
@@ -378,18 +426,28 @@ func main() {
 
 		// Check daily cap
 		if requestsDone >= *dailyFlag {
-			fmt.Fprintf(os.Stderr, "daily cap reached (%d requests). stopping.\n", *dailyFlag)
+			fmt.Fprintf(os.Stderr, "\n[!] daily cap reached (%d requests). Stopping.\n", *dailyFlag)
 			break
 		}
 
-		// skip if already cached
+		// skip if cached
 		mu.Lock()
-		if _, ok := cache[ip]; ok {
-			mu.Unlock()
-			fmt.Printf("[skip] cached: %s\n", ip)
+
+		cached, exists := cache[ip]
+		mu.Unlock()
+		if exists {
+			fmt.Printf("[cache] %s -> Risk: %s, Should Block: %v\n", ip, cached.RiskLevel, cached.ShouldBlock)
+			// categorized cached result
+			switch cached.RiskLevel {
+			case "HIGH":
+				highRisk = append(highRisk, ip)
+			case "MEDIUM":
+				mediumRisk = append(mediumRisk, ip)
+			case "LOW":
+				lowRisk = append(lowRisk, ip)
+			}
 			continue
 		}
-		mu.Unlock()
 
 		// Wait for ticker (rate-limiting). For first iteration, do not wait.
 		if requestsDone > 0 {
