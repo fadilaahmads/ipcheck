@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"net/http"
 )
 
 // ============================================================================
@@ -141,6 +142,7 @@ type EnhancedCachedResult struct {
 	AbuseTotalReports int            `json:"abuse_total_reports,omitempty"`
 	AbuseIsTor       bool            `json:"abuse_is_tor,omitempty"`
 	AbuseCountry     string          `json:"abuse_country,omitempty"`
+	AbuseISP          string          `json:"abuse_isp,omitempty"`
 	AbuseLastQueried int64           `json:"abuse_last_queried,omitempty"`
 	AbuseRaw         json.RawMessage `json:"abuse_raw,omitempty"`
 	// Combined assessment
