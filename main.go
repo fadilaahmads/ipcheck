@@ -13,6 +13,8 @@ import (
 	"strings"	
 	"sync"
 	"time"
+
+	"ipcheck/models"
 )
 
 // Configurable defaults
@@ -26,16 +28,7 @@ const (
   abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2/check"
 	)
 
-// cachedResult stores parsed vendors for an IP and when it was queried
-type cachedResult struct {
-	IP            string   `json:"ip"`
-	MaliciousBy   []string `json:"malicious_by,omitempty"`
-	SuspiciousBy  []string `json:"suspicious_by,omitempty"`
-	LastQueriedAt int64    `json:"last_queried_at"`
-	Raw           json.RawMessage `json:"raw,omitempty"`
-}
-
-type cacheMap map[string]cachedResult
+type cacheMap map[string]models.CachedResult
 
 // readLines reads lines from a file or stdin and returns deduplicated IPs
 func readLinesFromFileOrStdin(filename string) ([]string, error) {
@@ -423,7 +416,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "[warn] parse error for %s: %v\n", ip, perr)
 		}
 
-		cr := cachedResult{
+		cr := models.CachedResult{
 			IP:            ip,
 			MaliciousBy:   malicious,
 			SuspiciousBy:  suspicious,
