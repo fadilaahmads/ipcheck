@@ -4,14 +4,6 @@ import (
 	"encoding/json"
 )
 
-type CachedResult struct {
-	IP            string   `json:"ip"`
-	MaliciousBy   []string `json:"malicious_by,omitempty"`
-	SuspiciousBy  []string `json:"suspicious_by,omitempty"`
-	LastQueriedAt int64    `json:"last_queried_at"`
-	Raw           json.RawMessage `json:"raw,omitempty"`
-}
-
 // ============================================================================
 // AbuseIPDB Response Structures
 // ============================================================================
@@ -155,4 +147,19 @@ type EnhancedCachedResult struct {
 	RiskLevel        string          `json:"risk_level"` // HIGH, MEDIUM, LOW
 	ShouldBlock      bool            `json:"should_block"`
 	LastUpdated      int64           `json:"last_updated"`
+}
+
+// AbuseIPDB response structures (only what we need)
+type AbuseCheckResponse struct {
+	Data AbuseCheckData `json:"data"`
+}
+
+type AbuseCheckData struct {
+	IPAddress            string `json:"ipAddress"`
+	AbuseConfidenceScore int    `json:"abuseConfidenceScore"`
+	TotalReports         int    `json:"totalReports"`
+	IsTor                bool   `json:"isTor"`
+	CountryCode          string `json:"countryCode"`
+	ISP                  string `json:"isp"`
+	IsWhitelisted        bool   `json:"isWhitelisted"`
 }
