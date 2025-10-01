@@ -29,7 +29,7 @@ const (
   abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2/"
 	)
 
-type cacheMap map[string]models.EnhanchedCachedResult
+type cacheMap map[string]models.EnhancedCachedResult
 
 // readLines reads lines from a file or stdin and returns deduplicated IPs
 func readLinesFromFileOrStdin(filename string) ([]string, error) {
