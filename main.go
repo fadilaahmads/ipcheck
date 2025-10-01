@@ -31,6 +31,14 @@ const (
 
 type cacheMap map[string]models.EnhancedCachedResult
 
+// Helper function
+func minVal(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // readLines reads lines from a file or stdin and returns deduplicated IPs
 func readLinesFromFileOrStdin(filename string) ([]string, error) {
 	set := make(map[string]struct{})
@@ -160,7 +168,7 @@ func isPrivateIP(ipStr string) bool {
 }
 
 // parseAnalysis inspects the JSON response from VT and returns vendor lists
-func parseAnalysis(body json.RawMessage) (malicious []string, suspicious []string, err error) {
+func parseVTAnalysis(body json.RawMessage) (malicious []string, suspicious []string, err error) {
 	// Response structure: data.attributes.last_analysis_results.{vendor}.{category, result}
 	// We will decode into a generic map and walk it.
 	var root map[string]interface{}
@@ -291,7 +299,7 @@ func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, er
 // AbuseIPDB Functions
 // ============================================================================
 
-func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (*AbuseCheckData, error){
+func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (*models.AbuseCheckData, error){
 	params := url.Values{}
 	params.Add("ipAddress", ip)
 	params.Add("maxAgeInDays", "90")
@@ -329,7 +337,7 @@ func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (*AbuseCheckD
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	return &checkResp.Data
+	return &checkResp.Data, nil
 }
 
 // ============================================================================
@@ -455,98 +463,183 @@ func main() {
 		}
 
 		fmt.Printf("[query] %s\n", ip)
-		result := EnhancedCachedResult{
+		result := models.EnhancedCachedResult{
 			IP:	ip,
-			LastUpdated:	time.Now().Unix()
+			LastUpdated:	time.Now().Unix(),
 		}
 		
 		// Query VirusTotal
 		if useVT {
 			fmt.Printf("  → Querying AbuseIPDB...\n")
-			raw, qerr := queryVT(client, apiKey, ip)
+			vtRaw, vtErr := queryVT(client, vtAPIKey, ip)
 			requestsDone++
-			if qerr != nil {
-				fmt.Fprintf(os.Stderr, "[error] query %s: %v\n", ip, qerr)
+			if vtErr != nil {
+				fmt.Fprintf(os.Stderr, "[error] query %s: %v\n", ip, vtErr)
 				// If rate-limited by VT, it's best to stop immediately
-				if strings.Contains(qerr.Error(), "rate limited") {
+				if strings.Contains(vtErr.Error(), "rate limited") {
 					fmt.Fprintln(os.Stderr, "received rate limit response from VT; stopping further queries")
 					break
-				}
-				// continue to next ip on other errors
-				continue
-			}
-		} else {
-				malicious, suspicious, parseErr := parseAnalysis(raw)
+				}	
+			} else {
+				malicious, suspicious, parseErr := parseVTAnalysis(vtRaw)
 				if parseErr != nil {
-					fmt.Fprintf(os.Stderr, "[warn] parse error for %s: %v\n", ip, perr)
+					fmt.Fprintf(os.Stderr, "[warn] parse error for %s: %v\n", ip, parseErr)
 				} else {
 					result.VTMaliciousBy = malicious
 					result.VTSuspiciousBy = suspicious
 					result.VTLastQueried = time.Now().Unix()
 					result.VTRaw = vtRaw
 					fmt.Printf("  ✓ VT: Malicious=%d, Suspicious=%d\n", len(malicious), len(suspicious))
-				}
+				} 
 		}	
+
+		// Query AbuseIPDB
+		if useAbuse {
+			fmt.Printf("  → Querying AbuseIPDB...\n")
+			abuseData, abuseErr := queryAbuseIPDB(client, abuseipdbAPIKey, ip)
+			requestsDone++
+
+			if abuseErr != nil {
+				fmt.Fprintf(os.Stderr, "  ✗ AbuseIPDB error: %v\n", abuseErr)
+				if strings.Contains(abuseErr.Error(), "rate limited") {
+					fmt.Fprintln(os.Stderr, "[!] AbuseIPDB rate limit hit. Continuing with VT only")
+					useAbuse = false
+				}
+			} else {
+				result.AbuseScore = abuseData.AbuseConfidenceScore
+				result.AbuseTotalReports = abuseData.TotalReports 
+				result.AbuseIsTor = abuseData.IsTor 
+				result.AbuseCountry = abuseData.CountryCode
+				result.AbuseISP = abuseData.ISP
+				result.AbuseLastQueried = time.Now().Unix()
+
+				rawBytes, _ := json.Marshal(abuseData)
+				result.AbuseRaw = json.RawMessage(rawBytes)
+
+				fmt.Printf("  ✓ AbuseIPDB: Score=%d, Reports=%d, Tor=%v\n", abuseData.AbuseConfidenceScore, abuseData.TotalReports, abuseData.IsTor)
+			}
+		}
 
 		// write outputs & update cache
 		mu.Lock()
-		cache[ip] = cr	
-		// Append to malicious/suspicious files if vendors exist
-		if len(malicious) > 0 {
-			for _, v := range malicious {
-				line := fmt.Sprintf("%s %s", ip, v)
-				maliciousTemp = append(maliciousTemp, ip)
-				if err := appendLine(*malFile, line); err != nil {
-					fmt.Fprintf(os.Stderr, "[err] writing malicious file: %v\n", err)
-				}
+		cache[ip] = result
+		
+		// Categorized and write to files
+		switch result.RiskLevel {
+		case "HIGH":
+			highRisk = append(highRisk, ip)
+			line := fmt.Sprintf("%s | Risk: HIGH | VT_Mal: %d | Abuse: %d | Tor: %v | Block: YES", ip, len(result.VTMaliciousBy), result.AbuseScore, result.AbuseIsTor)
+			if err := appendLine(*malFile, line); err != nil {
+				fmt.Fprintf(os.Stderr, "  ✗ Error writing malicious file: %v\n", err)
 			}
-		}
-		if len(suspicious) > 0 {
-			for _, v := range suspicious {
-				line := fmt.Sprintf("%s %s", ip, v)
-				suspiciousTemp = append(suspiciousTemp, ip)
-				if err := appendLine(*suspFile, line); err != nil {
-					fmt.Fprintf(os.Stderr, "[err] writing suspicious file: %v\n", err)
-				}
+		case "MEDIUM":
+			mediumRisk = append(mediumRisk, ip)
+			line := fmt.Sprintf("%s | Risk: HIGH | VT_Mal: %d | Abuse: %d | Review: YES", ip, len(result.VTMaliciousBy), result.AbuseScore)
+			if err := appendLine(*suspFile, line); err != nil {
+				fmt.Fprintf(os.Stderr, "  ✗ Error writing suspicious file: %v\n", err)
 			}
+		default:
+			lowRisk = append(lowRisk, ip)
 		}
 
-		if len(malicious) == 0 && len(suspicious) == 0 {
-			cleanTemp = append(cleanTemp, ip)
-		}
-
-		// persist cache after every write (safe but slightly slower)
+		// Save cache after each IP
 		if err := saveCache(*cacheFlag, cache); err != nil {
-			fmt.Fprintf(os.Stderr, "[err] saving cache: %v\n", err)
+			fmt.Fprintf(os.Stderr, "  ✗ Error saving cache: %v\n", err)
 		}
 		mu.Unlock()
 
-		// small info
-		if len(malicious) > 0 {
-			fmt.Printf("[malicious] %s -> %v\n", ip, malicious)
-		} else if len(suspicious) > 0 {
-			fmt.Printf("[suspicious] %s -> %v\n", ip, suspicious)
-		} else {
-			fmt.Printf("[clean] %s\n", ip)
+		// Display summary for this IP
+		fmt.Printf("  ▶ Assessment: Risk=%s, Should Block=%v\n", result.RiskLevel, result.ShouldBlock)
+		if result.AbuseIsTor {
+			fmt.Printf("  ⚠ TOR EXIT NODE DETECTED\n")
+		}
+		if result.AbuseCountry != "" {
+			fmt.Printf("  ℹ Country: %s | ISP: %s\n", result.AbuseCountry, result.AbuseISP)
+		}
+		fmt.Println()
+	}
+
+	// ========================================================================
+	// Final Summary
+	// ========================================================================
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Println("                      THREAT INTELLIGENCE SUMMARY")
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Printf("Total IPs Processed: %d\n", len(ips))
+	fmt.Printf("API Requests Made:   %d\n\n", requestsDone)
+
+	// High Risk (Block)
+	fmt.Printf("🔴 HIGH RISK (BLOCK): %d\n", len(highRisk))
+	if len(highRisk) > 0 {
+		fmt.Println("───────────────────────────────────────────────────────────────")
+		for _, ip := range highRisk {
+			cached := cache[ip]
+			fmt.Printf("  • %s\n", ip)
+			if len(cached.VTMaliciousBy) > 0 {
+				fmt.Printf("    VT Malicious: %v\n", cached.VTMaliciousBy[:minVal(3, len(cached.VTMaliciousBy))])
+			}
+			fmt.Printf("    AbuseIPDB Score: %d | Reports: %d | Tor: %v\n", cached.AbuseScore, cached.AbuseTotalReports, cached.AbuseIsTor)
 		}
 	}
-	fmt.Println("")
-	fmt.Println("[*] Summary results")
-	fmt.Println("")
-	fmt.Printf("[>] Malicious: %d\n", len(maliciousTemp))
-	for _, maliciousIp := range maliciousTemp {
-		fmt.Printf("%s ", maliciousIp)
+	fmt.Println()
+
+	// Medium Risk (REVIEW)
+	fmt.Printf("🟡 MEDIUM RISK (REVIEW): %d\n", len(mediumRisk))
+	if len(mediumRisk) > 0 {
+		fmt.Println("───────────────────────────────────────────────────────────────")
+		for _, ip := range mediumRisk {
+			cached := cache[ip]
+			fmt.Printf("  • %s\n", ip)
+			fmt.Printf("    VT: Mal=%d, Susp=%d | AbuseIPDB: %d\n", len(cached.VTMaliciousBy), len(cached.VTSuspiciousBy), cached.AbuseScore)
+		}
 	}
-	fmt.Println("")
-	fmt.Printf("[>] Suspicious: %d\n", len(suspiciousTemp))
-	for _, suspiciousIp := range suspiciousTemp {
-		fmt.Printf("%s ", suspiciousIp)
+	fmt.Println()
+
+	// Low Risk (CLEAN)
+	fmt.Printf("🟢 LOW RISK (CLEAN): %d\n", len(lowRisk))
+	if len(lowRisk) > 0 && len(lowRisk) <= 10 {
+		fmt.Println("───────────────────────────────────────────────────────────────")
+		for _, ip := range lowRisk {
+			fmt.Printf("  • %s\n", ip)
+		}
 	}
-	fmt.Println("")
-	fmt.Printf("[>] Clean: %d\n", len(cleanTemp))
-	for _, cleanIp := range cleanTemp {
-		fmt.Printf("%s ", cleanIp)
+	fmt.Println()
+
+	// Recommendations
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Println("                        RECOMMENDATIONS")
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	if len(highRisk) > 0 {
+		fmt.Printf("🚨 IMMEDIATE ACTION: Block %d HIGH RISK IPs in firewall\n", len(highRisk))
+		fmt.Printf("   See: %s\n", *malFile)
 	}
-	fmt.Println("")
-	fmt.Println("[>] Done. requests made:", requestsDone)
+	if len(mediumRisk) > 0 {
+		fmt.Printf("⚠️  MANUAL REVIEW: Investigate %d MEDIUM RISK IPs\n", len(mediumRisk))
+		fmt.Printf("   See: %s\n", *suspFile)
+	}
+	if len(lowRisk) > 0 {
+		fmt.Printf("✅ NO ACTION: %d IPs appear clean\n", len(lowRisk))
+	}
+	fmt.Println()
+
+	// Export firewall commands (optional feature)
+	if len(highRisk) > 0 {
+		fmt.Println("───────────────────────────────────────────────────────────────")
+		fmt.Println("Sample Firewall Block Commands:")
+		fmt.Println("───────────────────────────────────────────────────────────────")
+		for i, ip := range highRisk {
+			if i >= 5 {
+				fmt.Printf("... and %d more\n", len(highRisk)-5)
+				break
+			}
+			fmt.Printf("  iptables -A INPUT -s %s -j DROP\n", ip)
+		}
+		fmt.Println()
+	}
+
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Printf("Cache saved to: %s\n", *cacheFlag)
+	fmt.Println("Scan complete.")
+
+	}
 }
