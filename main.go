@@ -455,32 +455,38 @@ func main() {
 		}
 
 		fmt.Printf("[query] %s\n", ip)
-		raw, qerr := queryVT(client, apiKey, ip)
-		requestsDone++
-
-		if qerr != nil {
-			fmt.Fprintf(os.Stderr, "[error] query %s: %v\n", ip, qerr)
-			// If rate-limited by VT, it's best to stop immediately
-			if strings.Contains(qerr.Error(), "rate limited") {
-				fmt.Fprintln(os.Stderr, "received rate limit response from VT; stopping further queries")
-				break
+		result := EnhancedCachedResult{
+			IP:	ip,
+			LastUpdated:	time.Now().Unix()
+		}
+		
+		// Query VirusTotal
+		if useVT {
+			fmt.Printf("  → Querying AbuseIPDB...\n")
+			raw, qerr := queryVT(client, apiKey, ip)
+			requestsDone++
+			if qerr != nil {
+				fmt.Fprintf(os.Stderr, "[error] query %s: %v\n", ip, qerr)
+				// If rate-limited by VT, it's best to stop immediately
+				if strings.Contains(qerr.Error(), "rate limited") {
+					fmt.Fprintln(os.Stderr, "received rate limit response from VT; stopping further queries")
+					break
+				}
+				// continue to next ip on other errors
+				continue
 			}
-			// continue to next ip on other errors
-			continue
-		}
-
-		malicious, suspicious, perr := parseAnalysis(raw)
-		if perr != nil {
-			fmt.Fprintf(os.Stderr, "[warn] parse error for %s: %v\n", ip, perr)
-		}
-
-		cr := models.CachedResult{
-			IP:            ip,
-			MaliciousBy:   malicious,
-			SuspiciousBy:  suspicious,
-			LastQueriedAt: time.Now().Unix(),
-			Raw:           raw,
-		}
+		} else {
+				malicious, suspicious, parseErr := parseAnalysis(raw)
+				if parseErr != nil {
+					fmt.Fprintf(os.Stderr, "[warn] parse error for %s: %v\n", ip, perr)
+				} else {
+					result.VTMaliciousBy = malicious
+					result.VTSuspiciousBy = suspicious
+					result.VTLastQueried = time.Now().Unix()
+					result.VTRaw = vtRaw
+					fmt.Printf("  ✓ VT: Malicious=%d, Suspicious=%d\n", len(malicious), len(suspicious))
+				}
+		}	
 
 		// write outputs & update cache
 		mu.Lock()
