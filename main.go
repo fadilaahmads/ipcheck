@@ -492,7 +492,8 @@ func main() {
 					result.VTRaw = vtRaw
 					fmt.Printf("  ✓ VT: Malicious=%d, Suspicious=%d\n", len(malicious), len(suspicious))
 				} 
-		}	
+			}	
+		}
 
 		// Query AbuseIPDB
 		if useAbuse {
