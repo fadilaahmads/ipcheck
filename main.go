@@ -26,7 +26,7 @@ const (
 	maliciousOutFile = "malicious.txt"
 	suspiciousOutFile= "suspicious.txt"	
 	virustotalApiBaseUrl = "https://www.virustotal.com/api/v3/"
-  abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2/"
+  abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2"
 	)
 
 type cacheMap map[string]models.EnhancedCachedResult
@@ -300,11 +300,12 @@ func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, er
 // ============================================================================
 
 func queryAbuseIPDB(client *http.Client, apiKey string, ip string) (*models.AbuseCheckData, error){
+
 	params := url.Values{}
 	params.Add("ipAddress", ip)
 	params.Add("maxAgeInDays", "90")
 	params.Add("verbose", "")
-
+	
 	req, err := http.NewRequest("GET", abuseipdbApiBaseUrl+"/check?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
@@ -422,7 +423,7 @@ func main() {
 	// Result tracking
 	var highRisk, mediumRisk, lowRisk []string
 	fmt.Printf("[*] Starting threat inelligence scan\n")
-	fmt.Printf("[*] Providers: VT: %v, AbuseIPDB=%v", useVT, useAbuse)
+	fmt.Printf("[*] Providers: VT: %v, AbuseIPDB=%v\n", useVT, useAbuse)
 	fmt.Printf("[*] Processing %d IPs\n\n", len(ips))
 
 	for _, ip := range ips {
@@ -470,7 +471,7 @@ func main() {
 		
 		// Query VirusTotal
 		if useVT {
-			fmt.Printf("  → Querying AbuseIPDB...\n")
+			fmt.Printf("  → Querying VirusTotal . . . \n")
 			vtRaw, vtErr := queryVT(client, vtAPIKey, ip)
 			requestsDone++
 			if vtErr != nil {
