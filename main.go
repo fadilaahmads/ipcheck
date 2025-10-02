@@ -532,7 +532,11 @@ func main() {
 				result.AbuseISP = abuseData.ISP
 				result.AbuseLastQueried = time.Now().Unix()
 
-				rawBytes, _ := json.Marshal(abuseData)
+				rawBytes, err := json.Marshal(abuseData)
+				if err != nil {
+					fmt.Println("  ✗ Error parsing abuseipdb datai")
+					os.Exit(1)
+				}
 				result.AbuseRaw = json.RawMessage(rawBytes)
 
 				fmt.Printf("  ✓ AbuseIPDB: Score=%d, Reports=%d, Tor=%v\n", abuseData.AbuseConfidenceScore, abuseData.TotalReports, abuseData.IsTor)
