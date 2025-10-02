@@ -424,7 +424,22 @@ func main() {
 	var highRisk, mediumRisk, lowRisk []string
 	fmt.Printf("[*] Starting threat inelligence scan\n")
 	fmt.Printf("[*] Providers: VT: %v, AbuseIPDB=%v\n", useVT, useAbuse)
-	fmt.Printf("[*] Processing %d IPs\n\n", len(ips))
+	fmt.Printf("[*] Processing %d IPs\n", len(ips))
+	
+	// Check quota
+	vtQuota, err := checkVTAPIQuota(client, vtAPIKey)
+	if err != nil {
+		fmt.Printf("Error checking VirusTotal quota: %v\n", err)
+		os.Exit(1)
+	}
+	vtQuotaTotal, vtQuotaToday, vtQuotaErr := parseVTAPIQuota(vtQuota)
+	if vtQuotaErr != nil {
+		fmt.Println("Error parsing VirusTotal quota: %v", vtQuotaErr)
+		os.Exit(1)
+	}
+	
+	fmt.Printf("[*] Virustotal Today AvailableQuota: %d | Quota Used Today: %d\n", vtQuotaTotal, vtQuotaToday)
+	fmt.Println()
 
 	for _, ip := range ips {
 		// Skip private IPs 
@@ -504,8 +519,10 @@ func main() {
 			if abuseErr != nil {
 				fmt.Fprintf(os.Stderr, "  ✗ AbuseIPDB error: %v\n", abuseErr)
 				if strings.Contains(abuseErr.Error(), "rate limited") {
+					mu.Lock()
 					fmt.Fprintln(os.Stderr, "[!] AbuseIPDB rate limit hit. Continuing with VT only")
 					useAbuse = false
+					mu.Unlock()
 				}
 			} else {
 				result.AbuseScore = abuseData.AbuseConfidenceScore
@@ -642,8 +659,7 @@ func main() {
 	}
 
 	fmt.Println("═══════════════════════════════════════════════════════════════")
-	fmt.Printf("Cache saved to: %s\n", *cacheFlag)
+	fmt.Printf("Cache saved to: %s\n", *cacheFlag)	
 	fmt.Println("Scan complete.")
 
-	}
 }
