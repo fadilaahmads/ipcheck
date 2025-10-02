@@ -522,6 +522,8 @@ func main() {
 			}
 		}
 
+		calculateRiskLevel(&result)
+
 		// write outputs & update cache
 		mu.Lock()
 		cache[ip] = result
