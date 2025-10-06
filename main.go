@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"ipcheck/models"
+	"ipcheck/internal/models"
 )
 
 // Configurable defaults
