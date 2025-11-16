@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -13,11 +12,12 @@ import (
 	"strings"	
 	"sync"
 	"time"
-
+	
+	"ipcheck/internal/cache"
 	"ipcheck/internal/models"
-	"ipcheck/internal/providers/virustotal"
 	"ipcheck/internal/providers/abuseipdb"
-)
+	"ipcheck/internal/providers/virustotal"
+	)
 
 // Configurable defaults
 const (
@@ -29,8 +29,6 @@ const (
 	virustotalApiBaseUrl = "https://www.virustotal.com/api/v3/"
   abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2"
 	)
-
-type cacheMap map[string]models.EnhancedCachedResult
 
 // Helper function
 func minVal(a, b int) int {
@@ -88,41 +86,6 @@ func readLinesFromFileOrStdin(filename string) ([]string, error) {
 		out = append(out, ip)
 	}
 	return out, nil
-}
-
-// loadCache loads vt_cache.json if exists, otherwise returns empty cache
-func loadCache(path string) (cacheMap, error) {
-	c := make(cacheMap)
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return c, nil
-		}
-		return nil, err
-	}
-	defer f.Close()
-	dec := json.NewDecoder(f)
-	if err := dec.Decode(&c); err != nil && err != io.EOF {
-		return nil, err
-	}
-	return c, nil
-}
-
-// saveCache writes cache atomically
-func saveCache(path string, c cacheMap) error {
-	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(c); err != nil {
-		f.Close()
-		return err
-	}
-	f.Close()
-	return os.Rename(tmp, path)
 }
 
 // appendLine appends a single line to a file, creating it if needed
@@ -237,7 +200,7 @@ func main() {
 	}
 
 	// load cache
-	cache, err := loadCache(*cacheFlag)
+	threatCache, err := cache.LoadCache(*cacheFlag)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to load cache:", err)
 		os.Exit(1)
@@ -288,7 +251,7 @@ func main() {
 		// skip if cached
 		mu.Lock()
 
-		cached, exists := cache[ip]
+		cached, exists := threatCache[ip]
 		mu.Unlock()
 		if exists {
 			fmt.Printf("[cache] %s -> Risk: %s, Should Block: %v\n", ip, cached.RiskLevel, cached.ShouldBlock)
@@ -378,7 +341,7 @@ func main() {
 
 		// write outputs & update cache
 		mu.Lock()
-		cache[ip] = result
+		threatCache[ip] = result
 		
 		// Categorized and write to files
 		switch result.RiskLevel {
@@ -399,7 +362,7 @@ func main() {
 		}
 
 		// Save cache after each IP
-		if err := saveCache(*cacheFlag, cache); err != nil {
+		if err := cache.SaveCache(*cacheFlag, threatCache); err != nil {
 			fmt.Fprintf(os.Stderr, "  ✗ Error saving cache: %v\n", err)
 		}
 		mu.Unlock()
@@ -429,7 +392,7 @@ func main() {
 	if len(highRisk) > 0 {
 		fmt.Println("───────────────────────────────────────────────────────────────")
 		for _, ip := range highRisk {
-			cached := cache[ip]
+			cached := threatCache[ip]
 			fmt.Printf("  • %s\n", ip)
 			if len(cached.VTMaliciousBy) > 0 {
 				fmt.Printf("    VT Malicious: %v\n", cached.VTMaliciousBy[:minVal(3, len(cached.VTMaliciousBy))])
@@ -444,7 +407,7 @@ func main() {
 	if len(mediumRisk) > 0 {
 		fmt.Println("───────────────────────────────────────────────────────────────")
 		for _, ip := range mediumRisk {
-			cached := cache[ip]
+			cached := threatCache[ip]
 			fmt.Printf("  • %s\n", ip)
 			fmt.Printf("    VT: Mal=%d, Susp=%d | AbuseIPDB: %d\n", len(cached.VTMaliciousBy), len(cached.VTSuspiciousBy), cached.AbuseScore)
 		}
