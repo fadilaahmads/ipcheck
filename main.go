@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"ipcheck/internal/models"
+	"ipcheck/internal/providers/virustotal"
 )
 
 // Configurable defaults
@@ -167,134 +168,6 @@ func isPrivateIP(ipStr string) bool {
 	return ip.IsLoopback() || ip.IsUnspecified()
 }
 
-// parseAnalysis inspects the JSON response from VT and returns vendor lists
-func parseVTAnalysis(body json.RawMessage) (malicious []string, suspicious []string, err error) {
-	// Response structure: data.attributes.last_analysis_results.{vendor}.{category, result}
-	// We will decode into a generic map and walk it.
-	var root map[string]interface{}
-	if err = json.Unmarshal(body, &root); err != nil {
-		return nil, nil, err
-	}
-	data, ok := root["data"].(map[string]interface{})
-	if !ok {
-		return nil, nil, fmt.Errorf("unexpected vt response: missing data")
-	}
-	attrs, ok := data["attributes"].(map[string]interface{})
-	if !ok {
-		return nil, nil, fmt.Errorf("unexpected vt response: missing attributes")
-	}
-	last, ok := attrs["last_analysis_results"].(map[string]interface{})
-	if !ok {
-		// no analysis details present
-		return nil, nil, nil
-	}
-	for vendor, v := range last {
-		vmap, ok := v.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		category, _ := vmap["category"].(string) // "malicious", "suspicious", "harmless", etc.
-		if category == "malicious" {
-			malicious = append(malicious, vendor)
-		} else if category == "suspicious" {
-			suspicious = append(suspicious, vendor)
-		}
-	}
-	return malicious, suspicious, nil
-}
-
-func parseVTAPIQuota(body json.RawMessage) (int, int, error) {
-	var root map[string]interface{}
-	if err := json.Unmarshal(body, &root); err != nil {
-		return 0,0, err
-	}
-	data, ok := root["data"].(map[string]interface{})
-	if !ok {
-		return 0,0, fmt.Errorf("unexpected response: no data")
-	}
-	
-	// parse total usage 
-	totalMap, ok := data["total"].(map[string]interface{})
-	if !ok {
-		return 0,0, fmt.Errorf("unexpected response: missing total")
-	}
-	totalVal, ok := totalMap["/api/v3/(ip_addresses)"].(float64)
-	if !ok {
-		return 0,0, fmt.Errorf("unexpected response: total[ip_addresses] not found or not number")
-	}
-
-	// parse today's usage
-	todayKey := time.Now().Format("2006-01-02")
-	dailyMap, ok := data["daily"].(map[string]interface{})
-	if !ok {
-		return int(totalVal), 0, fmt.Errorf("unexpected response: missing daily")
-	}
-	
-	var todayVal float64
-	if todayEntry, exists := dailyMap[todayKey]; exists {
-		if entryMap, ok := todayEntry.(map[string]interface{}); ok {
-			if v, ok :=entryMap["/api/v3/(ip_addresses)"].(float64); ok {
-				todayVal = v
-			}
-		}
-	}
-
-	return int(totalVal), int(todayVal), nil
-}
-
-func checkVTAPIQuota(client *http.Client, apiKey string) (json.RawMessage, error){
-	req, err := http.NewRequest("GET", virustotalApiBaseUrl+"users/"+apiKey+"/api_usage", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("x-apikey", apiKey)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("vt returned status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-	return json.RawMessage(bodyBytes), nil
-}
-
-// queryVT queries VirusTotal v3 for an IP and returns the raw JSON response
-func queryVT(client *http.Client, apiKey string, ip string) (json.RawMessage, error) {
-	req, err := http.NewRequest("GET", virustotalApiBaseUrl+"ip_addresses/"+ip, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("x-apikey", apiKey) // VT v3 uses x-apikey header OR Authorization Bearer; using x-apikey is fine
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	// 429 handling - caller can inspect resp.StatusCode for rate limit info
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("rate limited: %s", string(bodyBytes))
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("vt returned status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-	return json.RawMessage(bodyBytes), nil
-}
-
 // ============================================================================
 // AbuseIPDB Functions
 // ============================================================================
@@ -427,12 +300,12 @@ func main() {
 	fmt.Printf("[*] Processing %d IPs\n", len(ips))
 	
 	// Check quota
-	vtQuota, err := checkVTAPIQuota(client, vtAPIKey)
+	vtQuota, err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, vtAPIKey)
 	if err != nil {
 		fmt.Printf("Error checking VirusTotal quota: %v\n", err)
 		os.Exit(1)
 	}
-	vtQuotaTotal, vtQuotaToday, vtQuotaErr := parseVTAPIQuota(vtQuota)
+	vtQuotaTotal, vtQuotaToday, vtQuotaErr := virustotal.ParseVTAPIQuota(vtQuota)
 	if vtQuotaErr != nil {
 		fmt.Println("Error parsing VirusTotal quota: %v", vtQuotaErr)
 		os.Exit(1)
@@ -487,7 +360,7 @@ func main() {
 		// Query VirusTotal
 		if useVT {
 			fmt.Printf("  → Querying VirusTotal . . . \n")
-			vtRaw, vtErr := queryVT(client, vtAPIKey, ip)
+			vtRaw, vtErr := virustotal.QueryVT(client, virustotalApiBaseUrl, vtAPIKey, ip)
 			requestsDone++
 			if vtErr != nil {
 				fmt.Fprintf(os.Stderr, "[error] query %s: %v\n", ip, vtErr)
@@ -497,7 +370,7 @@ func main() {
 					break
 				}	
 			} else {
-				malicious, suspicious, parseErr := parseVTAnalysis(vtRaw)
+				malicious, suspicious, parseErr := virustotal.ParseVTAnalysis(vtRaw)
 				if parseErr != nil {
 					fmt.Fprintf(os.Stderr, "[warn] parse error for %s: %v\n", ip, parseErr)
 				} else {
