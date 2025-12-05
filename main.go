@@ -30,6 +30,16 @@ const (
   abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2"
 	)
 
+type Config struct {
+	FileFlag string
+	IntervalFlag time.Duration
+	DailyFlag int
+	CacheFlag string
+	MalFile string
+	SuspFile string
+	ProviderFlag string
+}
+
 // Helper function
 func minVal(a, b int) int {
 	if a < b {
@@ -53,30 +63,35 @@ func appendLine(path string, line string) error {
 	return err
 }
 
+func ParseFlags() *Config {
+	config := &Config{}
+	flag.StringVar(&config.FileFlag, "file", "", "path to file with IPs (one per line). If empty, reads from stdin")
+	flag.DurationVar(&config.IntervalFlag, "interval", defaultInterval, "interval between requests. default 15s -> 4 req/min")
+	flag.IntVar(&config.DailyFlag, "daily", defaultDailyCap, "daily request cap (per run). default Virustotal: 500")
+	flag.StringVar(&config.CacheFlag, "cache", cacheFilename, "path to cache json file")
+	flag.StringVar(&config.MalFile, "mal", maliciousOutFile, "malicious output file")
+	flag.StringVar(&config.SuspFile, "susp", suspiciousOutFile, "suspicious output file")
+	flag.StringVar(&config.ProviderFlag, "provider", "both", "threat intel provider: vt, abuse, or both")
+	flag.Parse()
+	return config
+}	
+
 func main() {
 	// flags
-	fileFlag := flag.String("file", "", "path to file with IPs (one per line). If empty, reads from stdin")
-	intervalFlag := flag.Duration("interval", defaultInterval, "interval between requests. default 15s -> 4 req/min")
-	dailyFlag := flag.Int("daily", defaultDailyCap, "daily request cap (per run). default 500")
-	cacheFlag := flag.String("cache", cacheFilename, "path to cache json file")
-	malFile := flag.String("mal", maliciousOutFile, "malicious output file")
-	suspFile := flag.String("susp", suspiciousOutFile, "suspicious output file")
-	providerFlag := flag.String("provider", "both", "threat intel provider: vt, abuse, or both")
-	flag.Parse()
-
+	config := ParseFlags()
   // Get API keys	
 	vtAPIKey := os.Getenv("VIRUSTOTAL_API_KEY")
 	abuseipdbAPIKey := os.Getenv("ABUSEIPDB_API_KEY")
 
-	useVT := (*providerFlag == "vt" || *providerFlag == "both") && vtAPIKey != ""
-	useAbuse := (*providerFlag == "abuse" || *providerFlag == "both") && abuseipdbAPIKey != ""
+	useVT := (config.ProviderFlag == "vt" || config.ProviderFlag == "both") && vtAPIKey != ""
+	useAbuse := (config.ProviderFlag == "abuse" || config.ProviderFlag == "both") && abuseipdbAPIKey != ""
 
 	if !useVT && !useAbuse {
 		fmt.Fprintln(os.Stderr, "error: no API keys Set. Set VIRUSTOTAL_API_KEY and/or ABUSEIPDB_API_KEY")
 		os.Exit(1)
 	}
 
-	ips, err := input.ReadLinesFromFileOrStdin(*fileFlag)
+	ips, err := input.ReadLinesFromFileOrStdin(config.FileFlag)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to read IPs:", err)
 		os.Exit(1)
@@ -87,7 +102,7 @@ func main() {
 	}
 
 	// load cache
-	threatCache, err := cache.LoadCache(*cacheFlag)
+	threatCache, err := cache.LoadCache(config.CacheFlag)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to load cache:", err)
 		os.Exit(1)
@@ -95,7 +110,7 @@ func main() {
 
 	client := &http.Client{Timeout: 30 * time.Second}
 		
-	ticker := time.NewTicker(*intervalFlag)
+	ticker := time.NewTicker(config.IntervalFlag)
 	defer ticker.Stop()
 
 	var mu sync.Mutex // protects cache and counters and file writes
@@ -130,8 +145,8 @@ func main() {
 		}
 
 		// Check daily cap
-		if requestsDone >= *dailyFlag {
-			fmt.Fprintf(os.Stderr, "\n[!] daily cap reached (%d requests). Stopping.\n", *dailyFlag)
+		if requestsDone >= config.DailyFlag {
+			fmt.Fprintf(os.Stderr, "\n[!] daily cap reached (%d requests). Stopping.\n", config.DailyFlag)
 			break
 		}
 
@@ -235,13 +250,13 @@ func main() {
 		case "HIGH":
 			highRisk = append(highRisk, ip)
 			line := fmt.Sprintf("%s | Risk: HIGH | VT_Mal: %d | Abuse: %d | Tor: %v | Block: YES", ip, len(result.VTMaliciousBy), result.AbuseScore, result.AbuseIsTor)
-			if err := appendLine(*malFile, line); err != nil {
+			if err := appendLine(config.MalFile, line); err != nil {
 				fmt.Fprintf(os.Stderr, "  ✗ Error writing malicious file: %v\n", err)
 			}
 		case "MEDIUM":
 			mediumRisk = append(mediumRisk, ip)
 			line := fmt.Sprintf("%s | Risk: HIGH | VT_Mal: %d | Abuse: %d | Review: YES", ip, len(result.VTMaliciousBy), result.AbuseScore)
-			if err := appendLine(*suspFile, line); err != nil {
+			if err := appendLine(config.SuspFile, line); err != nil {
 				fmt.Fprintf(os.Stderr, "  ✗ Error writing suspicious file: %v\n", err)
 			}
 		default:
@@ -249,7 +264,7 @@ func main() {
 		}
 
 		// Save cache after each IP
-		if err := cache.SaveCache(*cacheFlag, threatCache); err != nil {
+		if err := cache.SaveCache(config.CacheFlag, threatCache); err != nil {
 			fmt.Fprintf(os.Stderr, "  ✗ Error saving cache: %v\n", err)
 		}
 		mu.Unlock()
@@ -317,11 +332,11 @@ func main() {
 	fmt.Println("═══════════════════════════════════════════════════════════════")
 	if len(highRisk) > 0 {
 		fmt.Printf("🚨 IMMEDIATE ACTION: Block %d HIGH RISK IPs in firewall\n", len(highRisk))
-		fmt.Printf("   See: %s\n", *malFile)
+		fmt.Printf("   See: %s\n", config.MalFile)
 	}
 	if len(mediumRisk) > 0 {
 		fmt.Printf("⚠️  MANUAL REVIEW: Investigate %d MEDIUM RISK IPs\n", len(mediumRisk))
-		fmt.Printf("   See: %s\n", *suspFile)
+		fmt.Printf("   See: %s\n", config.SuspFile)
 	}
 	if len(lowRisk) > 0 {
 		fmt.Printf("✅ NO ACTION: %d IPs appear clean\n", len(lowRisk))
@@ -344,7 +359,7 @@ func main() {
 	}
 
 	fmt.Println("═══════════════════════════════════════════════════════════════")
-	fmt.Printf("Cache saved to: %s\n", *cacheFlag)	
+	fmt.Printf("Cache saved to: %s\n", config.CacheFlag)	
 	fmt.Println("Scan complete.")
 
 }
