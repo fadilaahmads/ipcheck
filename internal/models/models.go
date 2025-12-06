@@ -2,6 +2,7 @@ package models
 
 import (
 	"net/http"
+	"time"
 )
 
 // ============================================================================
@@ -137,4 +138,23 @@ type AbuseCheckData struct {
 	CountryCode          string `json:"countryCode"`
 	ISP                  string `json:"isp"`
 	IsWhitelisted        bool   `json:"isWhitelisted"`
+}
+
+// Konfigurasi CLI
+type CliConfig struct {
+	FileFlag			string
+	IntervalFlag	time.Duration
+	DailyFlag			int
+	CacheFlag			string
+	MalFile				string
+	SuspFile			string
+	ProviderFlag	string
+}
+
+// Konfigurasi untuk provider threat intelligence
+type ProviderConfig struct {
+	VTAPIKey				string
+	AbuseIPDBAPIKey	string
+	UseVT						bool
+	UseAbuse				bool
 }
