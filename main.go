@@ -41,6 +41,13 @@ type Config struct {
 	ProviderFlag string
 }
 
+type ProviderConfig struct {
+	VTAPIKey string
+	AbuseIPDBAPIKey string
+	UseVT bool
+	UseAbuse bool
+}
+
 // Helper function
 func minVal(a, b int) int {
 	if a < b {
@@ -77,20 +84,34 @@ func ParseFlags() *Config {
 	return config
 }	
 
+func SetupProviders(providerFlag string) (*ProviderConfig, error) {
+	vtAPIKey := os.Getenv("VIRUSTOTAL_API_KEY")
+	abuseipdbAPIKey := os.Getenv("ABUSEIPDB_API_KEY")
+
+	useVT := (providerFlag == "vt" || providerFlag == "both") && vtAPIKey != ""
+	useAbuse := (providerFlag == "abuse" || providerFlag == "both")
+
+	if !useVT && !useAbuse {
+		return nil, fmt.Errorf("no API keys set. Set VIRUSTOTAL_API_KEY and/or ABUSEIPDB_API_KEY")
+	}
+
+	return &ProviderConfig{
+		VTAPIKey: vtAPIKey,
+		AbuseIPDBAPIKey: abuseipdbAPIKey,
+		UseVT: useVT,
+		UseAbuse: useAbuse,
+	}, nil
+}
+
 func main() {
 	// flags
 	config := ParseFlags()
   // Get API keys	
-	vtAPIKey := os.Getenv("VIRUSTOTAL_API_KEY")
-	abuseipdbAPIKey := os.Getenv("ABUSEIPDB_API_KEY")
-
-	useVT := (config.ProviderFlag == "vt" || config.ProviderFlag == "both") && vtAPIKey != ""
-	useAbuse := (config.ProviderFlag == "abuse" || config.ProviderFlag == "both") && abuseipdbAPIKey != ""
-
-	if !useVT && !useAbuse {
-		fmt.Fprintln(os.Stderr, "error: no API keys Set. Set VIRUSTOTAL_API_KEY and/or ABUSEIPDB_API_KEY")
+	providers, err := SetupProviders(config.ProviderFlag)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
-	}
+	}	
 
 	ips, err := input.ReadLinesFromFileOrStdin(config.FileFlag)
 	if err != nil {
@@ -120,11 +141,11 @@ func main() {
 	// Result tracking
 	var highRisk, mediumRisk, lowRisk []string
 	fmt.Printf("[*] Starting threat inelligence scan\n")
-	fmt.Printf("[*] Providers: VT: %v, AbuseIPDB=%v\n", useVT, useAbuse)
+	fmt.Printf("[*] Providers: VT: %v, AbuseIPDB=%v\n", providers.UseVT, providers.UseAbuse)
 	fmt.Printf("[*] Processing %d IPs\n", len(ips))
 	
 	// Check quota
-	vtQuota, err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, vtAPIKey)
+	vtQuota, err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, providers.VTAPIKey)
 	if err != nil {
 		fmt.Printf("Error checking VirusTotal quota: %v\n", err)
 		os.Exit(1)
@@ -182,9 +203,9 @@ func main() {
 		}
 		
 		// Query VirusTotal
-		if useVT {
+		if providers.UseVT {
 			fmt.Printf("  → Querying VirusTotal . . . \n")
-			vtRaw, vtErr := virustotal.QueryVT(client, virustotalApiBaseUrl, vtAPIKey, ip)
+			vtRaw, vtErr := virustotal.QueryVT(client, virustotalApiBaseUrl, providers.VTAPIKey, ip)
 			requestsDone++
 			if vtErr != nil {
 				fmt.Fprintf(os.Stderr, "[error] query %s: %v\n", ip, vtErr)
@@ -208,9 +229,9 @@ func main() {
 		}
 
 		// Query AbuseIPDB
-		if useAbuse {
+		if providers.UseAbuse {
 			fmt.Printf("  → Querying AbuseIPDB...\n")
-			abuseData, abuseErr := abuseipdb.QueryAbuseIPDB(client, abuseipdbApiBaseUrl, abuseipdbAPIKey, ip)
+			abuseData, abuseErr := abuseipdb.QueryAbuseIPDB(client, abuseipdbApiBaseUrl, providers.AbuseIPDBAPIKey, ip)
 			requestsDone++
 
 			if abuseErr != nil {
@@ -218,7 +239,7 @@ func main() {
 				if strings.Contains(abuseErr.Error(), "rate limited") {
 					mu.Lock()
 					fmt.Fprintln(os.Stderr, "[!] AbuseIPDB rate limit hit. Continuing with VT only")
-					useAbuse = false
+					providers.UseAbuse = false
 					mu.Unlock()
 				}
 			} else {
