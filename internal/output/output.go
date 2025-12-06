@@ -2,6 +2,8 @@ package output
 
 import (
 	"fmt"
+
+	"ipcheck/internal/models"
 )
 
 func DisplaySingleLine() {
@@ -28,4 +30,10 @@ func DisplayFirewallCommandBanner()  {
 	fmt.Println("───────────────────────────────────────────────────────────────")
 	fmt.Println("Sample Firewall Block Commands:")
 	fmt.Println("───────────────────────────────────────────────────────────────")	
+}
+
+func PrintScanHeader(providers *models.ProviderConfig, ipCount int) {
+	fmt.Printf("[*] Starting threat inelligence scan\n")
+	fmt.Printf("[*] Providers: VT: %v, AbuseIPDB=%v\n", providers.UseVT, providers.UseAbuse)
+	fmt.Printf("[*] Processing %d IPs\n", ipCount)
 }

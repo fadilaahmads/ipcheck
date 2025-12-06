@@ -133,9 +133,7 @@ func main() {
 
 	// Result tracking
 	var highRisk, mediumRisk, lowRisk []string
-	fmt.Printf("[*] Starting threat inelligence scan\n")
-	fmt.Printf("[*] Providers: VT: %v, AbuseIPDB=%v\n", providers.UseVT, providers.UseAbuse)
-	fmt.Printf("[*] Processing %d IPs\n", len(ips))
+	output.PrintScanHeader(providers, len(ips))
 	
 	// Check quota
 	vtQuota, err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, providers.VTAPIKey)
