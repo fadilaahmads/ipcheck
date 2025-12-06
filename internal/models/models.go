@@ -158,3 +158,10 @@ type ProviderConfig struct {
 	UseVT						bool
 	UseAbuse				bool
 }
+
+type ScanState struct {
+	RequestDone int
+	HighRisk []string
+	MediumRisk []string
+	LowRisk []string
+}
