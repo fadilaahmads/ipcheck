@@ -15,6 +15,7 @@ import (
 	"ipcheck/internal/cache"
 	"ipcheck/internal/input"
 	"ipcheck/internal/models"
+	"ipcheck/internal/output"
 	"ipcheck/internal/providers/abuseipdb"
 	"ipcheck/internal/providers/virustotal"
 	)
@@ -283,16 +284,14 @@ func main() {
 	// ========================================================================
 	// Final Summary
 	// ========================================================================
-	fmt.Println("═══════════════════════════════════════════════════════════════")
-	fmt.Println("                      THREAT INTELLIGENCE SUMMARY")
-	fmt.Println("═══════════════════════════════════════════════════════════════")
+	output.DisplaySummaryBanner()
 	fmt.Printf("Total IPs Processed: %d\n", len(ips))
 	fmt.Printf("API Requests Made:   %d\n\n", requestsDone)
 
 	// High Risk (Block)
 	fmt.Printf("🔴 HIGH RISK (BLOCK): %d\n", len(highRisk))
 	if len(highRisk) > 0 {
-		fmt.Println("───────────────────────────────────────────────────────────────")
+		output.DisplaySingleLine()	
 		for _, ip := range highRisk {
 			cached := threatCache[ip]
 			fmt.Printf("  • %s\n", ip)
@@ -307,7 +306,7 @@ func main() {
 	// Medium Risk (REVIEW)
 	fmt.Printf("🟡 MEDIUM RISK (REVIEW): %d\n", len(mediumRisk))
 	if len(mediumRisk) > 0 {
-		fmt.Println("───────────────────────────────────────────────────────────────")
+		output.DisplaySingleLine()	
 		for _, ip := range mediumRisk {
 			cached := threatCache[ip]
 			fmt.Printf("  • %s\n", ip)
@@ -319,7 +318,7 @@ func main() {
 	// Low Risk (CLEAN)
 	fmt.Printf("🟢 LOW RISK (CLEAN): %d\n", len(lowRisk))
 	if len(lowRisk) > 0 && len(lowRisk) <= 10 {
-		fmt.Println("───────────────────────────────────────────────────────────────")
+		output.DisplaySingleLine()	
 		for _, ip := range lowRisk {
 			fmt.Printf("  • %s\n", ip)
 		}
@@ -327,9 +326,7 @@ func main() {
 	fmt.Println()
 
 	// Recommendations
-	fmt.Println("═══════════════════════════════════════════════════════════════")
-	fmt.Println("                        RECOMMENDATIONS")
-	fmt.Println("═══════════════════════════════════════════════════════════════")
+	output.DisplayRecommendationBanner()	
 	if len(highRisk) > 0 {
 		fmt.Printf("🚨 IMMEDIATE ACTION: Block %d HIGH RISK IPs in firewall\n", len(highRisk))
 		fmt.Printf("   See: %s\n", config.MalFile)
@@ -345,9 +342,7 @@ func main() {
 
 	// Export firewall commands (optional feature)
 	if len(highRisk) > 0 {
-		fmt.Println("───────────────────────────────────────────────────────────────")
-		fmt.Println("Sample Firewall Block Commands:")
-		fmt.Println("───────────────────────────────────────────────────────────────")
+		output.DisplayFirewallCommandBanner()	
 		for i, ip := range highRisk {
 			if i >= 5 {
 				fmt.Printf("... and %d more\n", len(highRisk)-5)
@@ -358,7 +353,7 @@ func main() {
 		fmt.Println()
 	}
 
-	fmt.Println("═══════════════════════════════════════════════════════════════")
+	output.DisplaySingleLine()	
 	fmt.Printf("Cache saved to: %s\n", config.CacheFlag)	
 	fmt.Println("Scan complete.")
 
