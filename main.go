@@ -41,13 +41,6 @@ type Config struct {
 	ProviderFlag string
 }
 
-type ProviderConfig struct {
-	VTAPIKey string
-	AbuseIPDBAPIKey string
-	UseVT bool
-	UseAbuse bool
-}
-
 // Helper function
 func minVal(a, b int) int {
 	if a < b {
@@ -71,8 +64,8 @@ func appendLine(path string, line string) error {
 	return err
 }
 
-func ParseFlags() *Config {
-	config := &Config{}
+func ParseFlags() *models.CliConfig {
+	config := &models.CliConfig{}
 	flag.StringVar(&config.FileFlag, "file", "", "path to file with IPs (one per line). If empty, reads from stdin")
 	flag.DurationVar(&config.IntervalFlag, "interval", defaultInterval, "interval between requests. default 15s -> 4 req/min")
 	flag.IntVar(&config.DailyFlag, "daily", defaultDailyCap, "daily request cap (per run). default Virustotal: 500")
@@ -84,7 +77,7 @@ func ParseFlags() *Config {
 	return config
 }	
 
-func SetupProviders(providerFlag string) (*ProviderConfig, error) {
+func SetupProviders(providerFlag string) (*models.ProviderConfig, error) {
 	vtAPIKey := os.Getenv("VIRUSTOTAL_API_KEY")
 	abuseipdbAPIKey := os.Getenv("ABUSEIPDB_API_KEY")
 
@@ -95,7 +88,7 @@ func SetupProviders(providerFlag string) (*ProviderConfig, error) {
 		return nil, fmt.Errorf("no API keys set. Set VIRUSTOTAL_API_KEY and/or ABUSEIPDB_API_KEY")
 	}
 
-	return &ProviderConfig{
+	return &models.ProviderConfig{
 		VTAPIKey: vtAPIKey,
 		AbuseIPDBAPIKey: abuseipdbAPIKey,
 		UseVT: useVT,
