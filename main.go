@@ -96,6 +96,21 @@ func SetupProviders(providerFlag string) (*models.ProviderConfig, error) {
 	}, nil
 }
 
+func CheckVTQuota(client *http.Client, apiKey string) error {
+	vtQuota, err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, apiKey)
+	if err != nil {
+		fmt.Errorf("Error checking VirusTotal quota: %v\n", err)	
+	}
+	vtQuotaTotal, vtQuotaToday, vtQuotaErr := virustotal.ParseVTAPIQuota(vtQuota)
+	if vtQuotaErr != nil {
+		fmt.Errorf("Error parsing VirusTotal quota: %v", vtQuotaErr)	
+	}
+	
+	fmt.Printf("[*] Virustotal Today AvailableQuota: %d | Quota Used Today: %d\n", vtQuotaTotal, vtQuotaToday)
+	fmt.Println()
+	return nil
+}
+
 func main() {
 	// flags
 	config := ParseFlags()
@@ -135,21 +150,6 @@ func main() {
 	var highRisk, mediumRisk, lowRisk []string
 	output.PrintScanHeader(providers, len(ips))
 	
-	// Check quota
-	vtQuota, err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, providers.VTAPIKey)
-	if err != nil {
-		fmt.Printf("Error checking VirusTotal quota: %v\n", err)
-		os.Exit(1)
-	}
-	vtQuotaTotal, vtQuotaToday, vtQuotaErr := virustotal.ParseVTAPIQuota(vtQuota)
-	if vtQuotaErr != nil {
-		fmt.Println("Error parsing VirusTotal quota: %v", vtQuotaErr)
-		os.Exit(1)
-	}
-	
-	fmt.Printf("[*] Virustotal Today AvailableQuota: %d | Quota Used Today: %d\n", vtQuotaTotal, vtQuotaToday)
-	fmt.Println()
-
 	for _, ip := range ips {
 		// Skip private IPs 
 		if input.IsPrivateIP(ip) {
@@ -195,6 +195,10 @@ func main() {
 		
 		// Query VirusTotal
 		if providers.UseVT {
+			if err := CheckVTQuota(client, providers.VTAPIKey); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 			fmt.Printf("  → Querying VirusTotal . . . \n")
 			vtRaw, vtErr := virustotal.QueryVT(client, virustotalApiBaseUrl, providers.VTAPIKey, ip)
 			requestsDone++
