@@ -303,17 +303,8 @@ func main() {
 	output.PrintHighRiskSummary(highRisk, threatCache)
 
 	// Medium Risk (REVIEW)
-	fmt.Printf("🟡 MEDIUM RISK (REVIEW): %d\n", len(mediumRisk))
-	if len(mediumRisk) > 0 {
-		output.DisplaySingleLine()	
-		for _, ip := range mediumRisk {
-			cached := threatCache[ip]
-			fmt.Printf("  • %s\n", ip)
-			fmt.Printf("    VT: Mal=%d, Susp=%d | AbuseIPDB: %d\n", len(cached.VTMaliciousBy), len(cached.VTSuspiciousBy), cached.AbuseScore)
-		}
-	}
-	fmt.Println()
-
+	output.PrintMediumRiskSummary(mediumRisk, threatCache)
+	
 	// Low Risk (CLEAN)
 	fmt.Printf("🟢 LOW RISK (CLEAN): %d\n", len(lowRisk))
 	if len(lowRisk) > 0 && len(lowRisk) <= 10 {

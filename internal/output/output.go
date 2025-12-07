@@ -71,3 +71,21 @@ func PrintHighRiskSummary(highRisk []string, threatCache cache.CacheMap)  {
 	}
 	fmt.Println()
 }
+
+func PrintMediumRiskSummary(mediumRisk []string, threatCache cache.CacheMap) {
+	fmt.Printf("🟡 MEDIUM RISK (REVIEW): %d\n", len(mediumRisk))
+	if len(mediumRisk) == 0 {
+		fmt.Println()
+		return
+	}
+
+	DisplaySingleLine()
+
+	for _, ip := range mediumRisk {
+		cached := threatCache[ip]
+		fmt.Printf("  • %s\n", ip)
+		fmt.Printf("    VT: Mal=%d, Susp=%d | AbuseIPDB: %d\n", 
+			len(cached.VTMaliciousBy), len(cached.VTSuspiciousBy), cached.AbuseScore)
+	}
+	fmt.Println()
+}
