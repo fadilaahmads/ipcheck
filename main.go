@@ -249,7 +249,10 @@ func main() {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			QueryVirustotal(client, virustotalApiBaseUrl, ip, &result)	
+			if err := QueryVirustotal(client, virustotalApiBaseUrl, ip, &result); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 		}
 
 		// Query AbuseIPDB
