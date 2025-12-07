@@ -124,6 +124,27 @@ func HandleCachedResult(ip string, cached models.EnhancedCachedResult, state *mo
 	}	
 }
 
+func QueryVirustotal(client *http.Client, apiKey string, ip string, result *models.EnhancedCachedResult) error {	
+	fmt.Printf("  → Querying VirusTotal . . . \n")
+	vtRaw, err := virustotal.QueryVT(client, virustotalApiBaseUrl, apiKey, ip)	
+	if err != nil {
+		return err
+	}
+
+	malicious, suspicious, err := virustotal.ParseVTAnalysis(vtRaw)
+	if err != nil {
+		return fmt.Errorf("parse error: %w", err)
+	}
+
+	result.VTMaliciousBy = malicious
+	result.VTSuspiciousBy = suspicious
+	result.VTLastQueried = time.Now().Unix()
+	result.VTRaw = vtRaw
+	
+	fmt.Printf("  ✓ VT: Malicious=%d, Suspicious=%d\n", len(malicious), len(suspicious))
+	return nil
+}
+
 func main() {
 	// flags
 	config := ParseFlags()
@@ -204,28 +225,7 @@ func main() {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			fmt.Printf("  → Querying VirusTotal . . . \n")
-			vtRaw, vtErr := virustotal.QueryVT(client, virustotalApiBaseUrl, providers.VTAPIKey, ip)
-			requestsDone++
-			if vtErr != nil {
-				fmt.Fprintf(os.Stderr, "[error] query %s: %v\n", ip, vtErr)
-				// If rate-limited by VT, it's best to stop immediately
-				if strings.Contains(vtErr.Error(), "rate limited") {
-					fmt.Fprintln(os.Stderr, "received rate limit response from VT; stopping further queries")
-					break
-				}	
-			} else {
-				malicious, suspicious, parseErr := virustotal.ParseVTAnalysis(vtRaw)
-				if parseErr != nil {
-					fmt.Fprintf(os.Stderr, "[warn] parse error for %s: %v\n", ip, parseErr)
-				} else {
-					result.VTMaliciousBy = malicious
-					result.VTSuspiciousBy = suspicious
-					result.VTLastQueried = time.Now().Unix()
-					result.VTRaw = vtRaw
-					fmt.Printf("  ✓ VT: Malicious=%d, Suspicious=%d\n", len(malicious), len(suspicious))
-				} 
-			}	
+			QueryVirustotal(client, virustotalApiBaseUrl, ip, &result)	
 		}
 
 		// Query AbuseIPDB
