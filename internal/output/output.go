@@ -44,13 +44,13 @@ func DisplaySummaryBanner(state *models.ScanState, threatCache cache.CacheMap, t
 	fmt.Printf("API Requests Made:   %d\n\n", state.RequestDone)
 
 	// High Risk (Block)
-	PrintHighRiskSummary(state.HighRisk, threatCache)
+	printHighRiskSummary(state.HighRisk, threatCache)
 
 	// Medium Risk (REVIEW)
-	PrintMediumRiskSummary(state.MediumRisk, threatCache)
+	printMediumRiskSummary(state.MediumRisk, threatCache)
 	
 	// Low Risk (CLEAN)
-	PrintLowRiskSummary(state.LowRisk)
+	printLowRiskSummary(state.LowRisk)
 
 	// Recommendations
 	DisplayRecommendationBanner(state, config.MalFile, config.SuspFile)	
@@ -99,7 +99,7 @@ func DisplaySingleIPSummary(result *models.EnhancedCachedResult)  {
 	fmt.Println()	
 }
 
-func PrintHighRiskSummary(highRisk []string, threatCache cache.CacheMap)  {
+func printHighRiskSummary(highRisk []string, threatCache cache.CacheMap)  {
 	fmt.Printf("🔴 HIGH RISK (BLOCK): %d\n", len(highRisk))
 	if len(highRisk) == 0 {
 		fmt.Println()
@@ -120,7 +120,7 @@ func PrintHighRiskSummary(highRisk []string, threatCache cache.CacheMap)  {
 	fmt.Println()
 }
 
-func PrintMediumRiskSummary(mediumRisk []string, threatCache cache.CacheMap) {
+func printMediumRiskSummary(mediumRisk []string, threatCache cache.CacheMap) {
 	fmt.Printf("🟡 MEDIUM RISK (REVIEW): %d\n", len(mediumRisk))
 	if len(mediumRisk) == 0 {
 		fmt.Println()
@@ -138,7 +138,7 @@ func PrintMediumRiskSummary(mediumRisk []string, threatCache cache.CacheMap) {
 	fmt.Println()
 }
 
-func PrintLowRiskSummary(lowRisk []string) {
+func printLowRiskSummary(lowRisk []string) {
 	fmt.Printf("🟢 LOW RISK (CLEAN): %d\n", len(lowRisk))
 	if len(lowRisk) > 0 && len(lowRisk) <= 10 {
 		DisplaySingleLine()	
