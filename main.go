@@ -295,14 +295,7 @@ func main() {
 		mu.Unlock()
 
 		// Display summary for this IP
-		fmt.Printf("  ▶ Assessment: Risk=%s, Should Block=%v\n", result.RiskLevel, result.ShouldBlock)
-		if result.AbuseIsTor {
-			fmt.Printf("  ⚠ TOR EXIT NODE DETECTED\n")
-		}
-		if result.AbuseCountry != "" {
-			fmt.Printf("  ℹ Country: %s | ISP: %s\n", result.AbuseCountry, result.AbuseISP)
-		}
-		fmt.Println()
+		output.DisplaySingleIPSummary(&result)	
 	}
 
 	// ========================================================================

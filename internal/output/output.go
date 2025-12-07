@@ -37,3 +37,14 @@ func PrintScanHeader(providers *models.ProviderConfig, ipCount int) {
 	fmt.Printf("[*] Providers: VT: %v, AbuseIPDB=%v\n", providers.UseVT, providers.UseAbuse)
 	fmt.Printf("[*] Processing %d IPs\n", ipCount)
 }
+
+func DisplaySingleIPSummary(result *models.EnhancedCachedResult)  {
+	fmt.Printf("  ▶ Assessment: Risk=%s, Should Block=%v\n", result.RiskLevel, result.ShouldBlock)
+	if result.AbuseIsTor {
+		fmt.Printf("  ⚠ TOR EXIT NODE DETECTED\n")
+	}
+	if result.AbuseCountry != "" {
+		fmt.Printf("  ℹ Country: %s | ISP: %s\n", result.AbuseCountry, result.AbuseISP)
+	}
+	fmt.Println()	
+}
