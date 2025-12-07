@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"	
 	"sync"
 	"time"
 	
@@ -145,6 +144,31 @@ func QueryVirustotal(client *http.Client, apiKey string, ip string, result *mode
 	return nil
 }
 
+func ParsingAbuseIPDB(client *http.Client, apiKey string, ip string, result *models.EnhancedCachedResult) error {
+	fmt.Printf("  → Querying AbuseIPDB...\n")
+	abuseData, err := abuseipdb.QueryAbuseIPDB(client, abuseipdbApiBaseUrl, apiKey, ip)
+	if err != nil {
+		return err
+	}
+
+	result.AbuseScore = abuseData.AbuseConfidenceScore
+	result.AbuseTotalReports = abuseData.TotalReports
+	result.AbuseIsTor = abuseData.IsTor
+	result.AbuseCountry = abuseData.CountryCode
+	result.AbuseISP = abuseData.ISP
+	result.AbuseLastQueried = time.Now().Unix()
+
+	rawBytes, err := json.Marshal(abuseData)
+	if err != nil {
+		return fmt.Errorf("error marshaling AbuseIPDB data: %w", err)
+	}
+	result.AbuseRaw = json.RawMessage(rawBytes)
+
+	fmt.Printf("  ✓ AbuseIPDB: Score=%d, Reports=%d, Tor=%v\n", 
+		abuseData.AbuseConfidenceScore, abuseData.TotalReports, abuseData.IsTor)
+	return nil
+}
+
 func main() {
 	// flags
 	config := ParseFlags()
@@ -230,35 +254,11 @@ func main() {
 
 		// Query AbuseIPDB
 		if providers.UseAbuse {
-			fmt.Printf("  → Querying AbuseIPDB...\n")
-			abuseData, abuseErr := abuseipdb.QueryAbuseIPDB(client, abuseipdbApiBaseUrl, providers.AbuseIPDBAPIKey, ip)
-			requestsDone++
-
-			if abuseErr != nil {
-				fmt.Fprintf(os.Stderr, "  ✗ AbuseIPDB error: %v\n", abuseErr)
-				if strings.Contains(abuseErr.Error(), "rate limited") {
-					mu.Lock()
-					fmt.Fprintln(os.Stderr, "[!] AbuseIPDB rate limit hit. Continuing with VT only")
-					providers.UseAbuse = false
-					mu.Unlock()
-				}
-			} else {
-				result.AbuseScore = abuseData.AbuseConfidenceScore
-				result.AbuseTotalReports = abuseData.TotalReports 
-				result.AbuseIsTor = abuseData.IsTor 
-				result.AbuseCountry = abuseData.CountryCode
-				result.AbuseISP = abuseData.ISP
-				result.AbuseLastQueried = time.Now().Unix()
-
-				rawBytes, err := json.Marshal(abuseData)
-				if err != nil {
-					fmt.Println("  ✗ Error parsing abuseipdb datai")
-					os.Exit(1)
-				}
-				result.AbuseRaw = json.RawMessage(rawBytes)
-
-				fmt.Printf("  ✓ AbuseIPDB: Score=%d, Reports=%d, Tor=%v\n", abuseData.AbuseConfidenceScore, abuseData.TotalReports, abuseData.IsTor)
-			}
+			err := ParsingAbuseIPDB(client, abuseipdbApiBaseUrl, ip, &result)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}	
 		}
 
 		assessment.CalculateRiskLevel(&result)
