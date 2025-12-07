@@ -2,6 +2,7 @@ malicious.txt
 suspicious.txt
 ips.txt
 threat_intel_cache.json
+.env
 
 #binary name
 ipcheck
