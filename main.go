@@ -181,6 +181,107 @@ func SaveResultToFile(result *models.EnhancedCachedResult, malFile, suspFile str
 	return appendLine(outputFile, line)
 }
 
+// ProcessIP queries thrate intelligence providers and assess a single IP
+func ProcessIP(
+	ip string,
+	client *http.Client,
+	providers *models.ProviderConfig,
+	config *models.CliConfig,
+	state *models.ScanState,
+	threatCache cache.CacheMap,
+	mu *sync.Mutex,
+) (shouldStop bool) {
+	fmt.Printf("[query] %s\n", ip)
+
+	result := models.EnhancedCachedResult{
+		IP: ip,
+		LastUpdated: time.Now().Unix(),
+	}
+	// Query VirusTotal
+	if providers.UseVT {	
+		if err := ParsingVirustotal(client, providers.VTAPIKey, ip, &result); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
+	// Query AbuseIPDB
+	if providers.UseAbuse {
+		if err := ParsingAbuseIPDB(client, providers.AbuseIPDBAPIKey, ip, &result); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}	
+	}
+
+	assessment.CalculateRiskLevel(&result)
+
+	// write outputs & update cache
+	mu.Lock()
+	threatCache[ip] = result
+		
+	// Categorized and write to files
+	if err := SaveResultToFile(&result, config.MalFile, config.SuspFile); err != nil {
+		fmt.Fprintf(os.Stderr, "   ✗ Error writing output file: %v\n", err)
+	}	
+	mu.Unlock()
+
+	// Display summary for this IP
+	output.DisplaySingleIPSummary(&result)
+
+	return false
+}
+
+// ScanIP performs the main scanning loop
+func ScanIPs(
+	ips []string, 
+	client *http.Client, 
+	providers *models.ProviderConfig, 
+	config *models.CliConfig, 
+	threatCache cache.CacheMap,
+) *models.ScanState {
+	ticker := time.NewTicker(config.IntervalFlag)
+	defer ticker.Stop()
+
+	var mu sync.Mutex
+	state := &models.ScanState{}
+
+	for _, ip := range ips {
+		// Skip private IPs 
+		if input.IsPrivateIP(ip) {
+			fmt.Printf("[skip] private/internal IP: %s\n", ip)
+			continue
+		}
+
+		// Check daily cap
+		if state.RequestDone >= config.DailyFlag {
+			fmt.Fprintf(os.Stderr, "\n[!] daily cap reached (%d requests). Stopping.\n", config.DailyFlag)
+			break
+		}
+
+		// Check cache
+		mu.Lock()
+		cached, exists := threatCache[ip]
+		mu.Unlock()
+
+		if exists {
+			HandleCachedResult(ip, cached, state)
+			continue
+		}
+
+		// Rate limiting (skip wait on first reuqest)
+		if state.RequestDone > 0 {
+			<-ticker.C 
+		}
+
+		// Process IP 
+		if shouldStop := ProcessIP(ip, client, providers, config, state, threatCache, &mu); shouldStop {
+			break
+		}
+	}
+
+	return state
+}
+
 func main() {
 	// flags
 	config := ParseFlags()
@@ -209,87 +310,15 @@ func main() {
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
-		
-	ticker := time.NewTicker(config.IntervalFlag)
-	defer ticker.Stop()
 
-	var mu sync.Mutex // protects cache and counters and file writes
-	state := &models.ScanState{}
-	requestsDone := 0
-
-	// Result tracking	
-	output.PrintScanHeader(providers, len(ips))
-	
-	for _, ip := range ips {
-		// Skip private IPs 
-		if input.IsPrivateIP(ip) {
-			fmt.Printf("[skip] private/internal IP: %s\n", ip)
-			continue
-		}
-
-		// Check daily cap
-		if requestsDone >= config.DailyFlag {
-			fmt.Fprintf(os.Stderr, "\n[!] daily cap reached (%d requests). Stopping.\n", config.DailyFlag)
-			break
-		}
-
-		// skip if cached
-		mu.Lock()
-
-		cached, exists := threatCache[ip]
-		mu.Unlock()
-		if exists {
-			HandleCachedResult(ip, cached, state)	
-			continue
-		}
-
-		// Wait for ticker (rate-limiting). For first iteration, do not wait.
-		if requestsDone > 0 {
-			<-ticker.C
-		}
-
-		fmt.Printf("[query] %s\n", ip)
-		result := models.EnhancedCachedResult{
-			IP:	ip,
-			LastUpdated:	time.Now().Unix(),
-		}
-		
-		// Query VirusTotal
-		if providers.UseVT {
-			if err := CheckVTQuota(client, providers.VTAPIKey); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-			if err := ParsingVirustotal(client, virustotalApiBaseUrl, ip, &result); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-		}
-
-		// Query AbuseIPDB
-		if providers.UseAbuse {
-			err := ParsingAbuseIPDB(client, abuseipdbApiBaseUrl, ip, &result)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}	
-		}
-
-		assessment.CalculateRiskLevel(&result)
-
-		// write outputs & update cache
-		mu.Lock()
-		threatCache[ip] = result
-		
-		// Categorized and write to files
-		if err := SaveResultToFile(&result, config.MalFile, config.SuspFile); err != nil {
-			fmt.Fprintf(os.Stderr, "   ✗ Error writing output file: %v\n", err)
-		}	
-		mu.Unlock()
-
-		// Display summary for this IP
-		output.DisplaySingleIPSummary(&result)	
+	// Check VirusTotal quota
+	if err := CheckVTQuota(client, providers.VTAPIKey); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
+
+	// Perform Scan
+	state := ScanIPs(ips, client, providers, config, threatCache)
 
 	// Final Summary	
 	output.DisplaySummaryBanner(state, threatCache, ips, config)	
