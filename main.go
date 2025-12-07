@@ -312,17 +312,7 @@ func main() {
 	output.DisplayRecommendationBanner(state, config.MalFile, config.SuspFile)	
 
 	// Export firewall commands (optional feature)
-	if len(highRisk) > 0 {
-		output.DisplayFirewallCommandBanner()	
-		for i, ip := range highRisk {
-			if i >= 5 {
-				fmt.Printf("... and %d more\n", len(highRisk)-5)
-				break
-			}
-			fmt.Printf("  iptables -A INPUT -s %s -j DROP\n", ip)
-		}
-		fmt.Println()
-	}
+	output.DisplayFirewallCommandBanner(highRisk)
 
 	output.DisplaySingleLine()	
 	fmt.Printf("Cache saved to: %s\n", config.CacheFlag)	

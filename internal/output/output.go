@@ -41,10 +41,23 @@ func DisplaySummaryBanner() {
 	fmt.Println("═══════════════════════════════════════════════════════════════")
 }
 
-func DisplayFirewallCommandBanner()  {
+func DisplayFirewallCommandBanner(highRisk []string)  {
+	if len(highRisk) == 0 {
+		return
+	}
+
 	fmt.Println("───────────────────────────────────────────────────────────────")
 	fmt.Println("Sample Firewall Block Commands:")
 	fmt.Println("───────────────────────────────────────────────────────────────")	
+
+	for i, ip := range highRisk {
+		if i >= 5 {
+			fmt.Printf("... and %d more\n", len(highRisk)-5)
+			break
+		}
+		fmt.Printf("  iptables -A INPUT -s %s -j DROP\n", ip)
+	}
+	fmt.Println()
 }
 
 func PrintScanHeader(providers *models.ProviderConfig, ipCount int) {
