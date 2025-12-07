@@ -16,10 +16,23 @@ func DisplayDoubleLine() {
 	fmt.Println("═══════════════════════════════════════════════════════════════")	
 }
 
-func DisplayRecommendationBanner() {
+func DisplayRecommendationBanner(state *models.ScanState, malFile, suspFile string) {
 	fmt.Println("═══════════════════════════════════════════════════════════════")
 	fmt.Println("                        RECOMMENDATIONS")
 	fmt.Println("═══════════════════════════════════════════════════════════════")
+
+	if len(state.HighRisk) > 0 {
+		fmt.Printf("🚨 IMMEDIATE ACTION: Block %d HIGH RISK IPs in firewall\n", len(state.HighRisk))
+		fmt.Printf("   See: %s\n", malFile)
+	}
+	if len(state.MediumRisk) > 0 {
+		fmt.Printf("⚠️  MANUAL REVIEW: Investigate %d MEDIUM RISK IPs\n", len(state.MediumRisk))
+		fmt.Printf("   See: %s\n", suspFile)
+	}
+	if len(state.LowRisk) > 0 {
+		fmt.Printf("✅ NO ACTION: %d IPs appear clean\n", len(state.LowRisk))
+	}
+	fmt.Println()
 }
 
 func DisplaySummaryBanner() {

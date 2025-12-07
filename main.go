@@ -309,19 +309,7 @@ func main() {
 	output.PrintLowRiskSummary(lowRisk)
 
 	// Recommendations
-	output.DisplayRecommendationBanner()	
-	if len(highRisk) > 0 {
-		fmt.Printf("🚨 IMMEDIATE ACTION: Block %d HIGH RISK IPs in firewall\n", len(highRisk))
-		fmt.Printf("   See: %s\n", config.MalFile)
-	}
-	if len(mediumRisk) > 0 {
-		fmt.Printf("⚠️  MANUAL REVIEW: Investigate %d MEDIUM RISK IPs\n", len(mediumRisk))
-		fmt.Printf("   See: %s\n", config.SuspFile)
-	}
-	if len(lowRisk) > 0 {
-		fmt.Printf("✅ NO ACTION: %d IPs appear clean\n", len(lowRisk))
-	}
-	fmt.Println()
+	output.DisplayRecommendationBanner(state, config.MalFile, config.SuspFile)	
 
 	// Export firewall commands (optional feature)
 	if len(highRisk) > 0 {
