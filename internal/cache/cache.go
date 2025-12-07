@@ -8,11 +8,11 @@ import (
 	"ipcheck/internal/models"
 )
 
-type cacheMap map[string]models.EnhancedCachedResult
+type CacheMap map[string]models.EnhancedCachedResult
 
 // loadCache loads vt_cache.json if exists, otherwise returns empty cache
-func LoadCache(path string) (cacheMap, error) {
-	c := make(cacheMap)
+func LoadCache(path string) (CacheMap, error) {
+	c := make(CacheMap)
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -29,7 +29,7 @@ func LoadCache(path string) (cacheMap, error) {
 }
 
 // saveCache writes cache atomically
-func SaveCache(path string, c cacheMap) error {
+func SaveCache(path string, c CacheMap) error {
 	tmp := path + ".tmp"
 	f, err := os.Create(tmp)
 	if err != nil {

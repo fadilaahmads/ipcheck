@@ -2,8 +2,10 @@ package output
 
 import (
 	"fmt"
-
+	
+	"ipcheck/internal/cache"
 	"ipcheck/internal/models"
+	"ipcheck/internal/utils"
 )
 
 func DisplaySingleLine() {
@@ -47,4 +49,25 @@ func DisplaySingleIPSummary(result *models.EnhancedCachedResult)  {
 		fmt.Printf("  ℹ Country: %s | ISP: %s\n", result.AbuseCountry, result.AbuseISP)
 	}
 	fmt.Println()	
+}
+
+func PrintHighRiskSummary(highRisk []string, threatCache cache.CacheMap)  {
+	fmt.Printf("🔴 HIGH RISK (BLOCK): %d\n", len(highRisk))
+	if len(highRisk) == 0 {
+		fmt.Println()
+		return
+	}
+
+	DisplaySingleLine()
+
+	for _, ip := range highRisk {
+		cached := threatCache[ip]
+		fmt.Printf("  • %s\n", ip)
+		if len(cached.VTMaliciousBy) > 0 {
+			fmt.Printf("    VT Malicious: %v\n", cached.VTMaliciousBy[:utils.MinVal(3, len(cached.VTMaliciousBy))])
+		}
+		fmt.Printf("    AbuseIPDB Score: %d | Reports: %d | Tor: %v\n", 
+			cached.AbuseScore, cached.AbuseTotalReports, cached.AbuseIsTor)
+	}
+	fmt.Println()
 }

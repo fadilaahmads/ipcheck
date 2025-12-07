@@ -40,14 +40,6 @@ type Config struct {
 	ProviderFlag string
 }
 
-// Helper function
-func minVal(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // appendLine appends a single line to a file, creating it if needed
 func appendLine(path string, line string) error {
 	// ensure directory exists
@@ -308,19 +300,7 @@ func main() {
 	fmt.Printf("API Requests Made:   %d\n\n", requestsDone)
 
 	// High Risk (Block)
-	fmt.Printf("🔴 HIGH RISK (BLOCK): %d\n", len(highRisk))
-	if len(highRisk) > 0 {
-		output.DisplaySingleLine()	
-		for _, ip := range highRisk {
-			cached := threatCache[ip]
-			fmt.Printf("  • %s\n", ip)
-			if len(cached.VTMaliciousBy) > 0 {
-				fmt.Printf("    VT Malicious: %v\n", cached.VTMaliciousBy[:minVal(3, len(cached.VTMaliciousBy))])
-			}
-			fmt.Printf("    AbuseIPDB Score: %d | Reports: %d | Tor: %v\n", cached.AbuseScore, cached.AbuseTotalReports, cached.AbuseIsTor)
-		}
-	}
-	fmt.Println()
+	output.PrintHighRiskSummary(highRisk, threatCache)
 
 	// Medium Risk (REVIEW)
 	fmt.Printf("🟡 MEDIUM RISK (REVIEW): %d\n", len(mediumRisk))
