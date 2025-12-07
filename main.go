@@ -169,6 +169,26 @@ func ParsingAbuseIPDB(client *http.Client, apiKey string, ip string, result *mod
 	return nil
 }
 
+func SaveResultToFile(result *models.EnhancedCachedResult, malFile, suspFile string) error {
+	var line string
+	var outputFile string
+
+	switch result.RiskLevel {
+	case "HIGH":
+		line = fmt.Sprintf("%s | Risk: HIGH | VT_Mal: %d | Abuse: %d | Tor: %v | Block: YES",
+	 result.IP, len(result.VTMaliciousBy), result.AbuseScore, result.AbuseIsTor)
+	 outputFile = malFile 
+  case "MEDIUM":
+		line = fmt.Sprintf("%s | Risk: MEDIUM | VT_Mal: %d | Abuse: %d | Tor: %v | Review: YES",
+	 result.IP, len(result.VTMaliciousBy), result.AbuseScore, result.AbuseIsTor)
+	 outputFile = suspFile
+	default:
+	 return nil // Low risk doesn't need file output
+	}
+
+	return appendLine(outputFile, line)
+}
+
 func main() {
 	// flags
 	config := ParseFlags()
@@ -271,27 +291,9 @@ func main() {
 		threatCache[ip] = result
 		
 		// Categorized and write to files
-		switch result.RiskLevel {
-		case "HIGH":
-			highRisk = append(highRisk, ip)
-			line := fmt.Sprintf("%s | Risk: HIGH | VT_Mal: %d | Abuse: %d | Tor: %v | Block: YES", ip, len(result.VTMaliciousBy), result.AbuseScore, result.AbuseIsTor)
-			if err := appendLine(config.MalFile, line); err != nil {
-				fmt.Fprintf(os.Stderr, "  ✗ Error writing malicious file: %v\n", err)
-			}
-		case "MEDIUM":
-			mediumRisk = append(mediumRisk, ip)
-			line := fmt.Sprintf("%s | Risk: HIGH | VT_Mal: %d | Abuse: %d | Review: YES", ip, len(result.VTMaliciousBy), result.AbuseScore)
-			if err := appendLine(config.SuspFile, line); err != nil {
-				fmt.Fprintf(os.Stderr, "  ✗ Error writing suspicious file: %v\n", err)
-			}
-		default:
-			lowRisk = append(lowRisk, ip)
-		}
-
-		// Save cache after each IP
-		if err := cache.SaveCache(config.CacheFlag, threatCache); err != nil {
-			fmt.Fprintf(os.Stderr, "  ✗ Error saving cache: %v\n", err)
-		}
+		if err := SaveResultToFile(&result, config.MalFile, config.SuspFile); err != nil {
+			fmt.Fprintf(os.Stderr, "   ✗ Error writing output file: %v\n", err)
+		}	
 		mu.Unlock()
 
 		// Display summary for this IP
