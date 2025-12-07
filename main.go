@@ -217,8 +217,7 @@ func main() {
 	state := &models.ScanState{}
 	requestsDone := 0
 
-	// Result tracking
-	var highRisk, mediumRisk, lowRisk []string
+	// Result tracking	
 	output.PrintScanHeader(providers, len(ips))
 	
 	for _, ip := range ips {
@@ -292,30 +291,6 @@ func main() {
 		output.DisplaySingleIPSummary(&result)	
 	}
 
-	// ========================================================================
-	// Final Summary
-	// ========================================================================
-	output.DisplaySummaryBanner()
-	fmt.Printf("Total IPs Processed: %d\n", len(ips))
-	fmt.Printf("API Requests Made:   %d\n\n", requestsDone)
-
-	// High Risk (Block)
-	output.PrintHighRiskSummary(highRisk, threatCache)
-
-	// Medium Risk (REVIEW)
-	output.PrintMediumRiskSummary(mediumRisk, threatCache)
-	
-	// Low Risk (CLEAN)
-	output.PrintLowRiskSummary(lowRisk)
-
-	// Recommendations
-	output.DisplayRecommendationBanner(state, config.MalFile, config.SuspFile)	
-
-	// Export firewall commands (optional feature)
-	output.DisplayFirewallCommandBanner(highRisk)
-
-	output.DisplaySingleLine()	
-	fmt.Printf("Cache saved to: %s\n", config.CacheFlag)	
-	fmt.Println("Scan complete.")
-
+	// Final Summary	
+	output.DisplaySummaryBanner(state, threatCache, ips, config)	
 }

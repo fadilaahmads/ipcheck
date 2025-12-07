@@ -35,10 +35,32 @@ func DisplayRecommendationBanner(state *models.ScanState, malFile, suspFile stri
 	fmt.Println()
 }
 
-func DisplaySummaryBanner() {
+func DisplaySummaryBanner(state *models.ScanState, threatCache cache.CacheMap, totalIPs []string, config *models.CliConfig) {
 	fmt.Println("═══════════════════════════════════════════════════════════════")
 	fmt.Println("                      THREAT INTELLIGENCE SUMMARY")
 	fmt.Println("═══════════════════════════════════════════════════════════════")
+
+	fmt.Printf("Total IPs Processed: %d\n", len(totalIPs))
+	fmt.Printf("API Requests Made:   %d\n\n", state.RequestDone)
+
+	// High Risk (Block)
+	PrintHighRiskSummary(state.HighRisk, threatCache)
+
+	// Medium Risk (REVIEW)
+	PrintMediumRiskSummary(state.MediumRisk, threatCache)
+	
+	// Low Risk (CLEAN)
+	PrintLowRiskSummary(state.LowRisk)
+
+	// Recommendations
+	DisplayRecommendationBanner(state, config.MalFile, config.SuspFile)	
+
+	// Export firewall commands (optional feature)
+	DisplayFirewallCommandBanner(state.HighRisk)
+
+	DisplaySingleLine()	
+	fmt.Printf("Cache saved to: %s\n", config.CacheFlag)	
+	fmt.Println("Scan complete.")
 }
 
 func DisplayFirewallCommandBanner(highRisk []string)  {
