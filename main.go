@@ -306,14 +306,7 @@ func main() {
 	output.PrintMediumRiskSummary(mediumRisk, threatCache)
 	
 	// Low Risk (CLEAN)
-	fmt.Printf("🟢 LOW RISK (CLEAN): %d\n", len(lowRisk))
-	if len(lowRisk) > 0 && len(lowRisk) <= 10 {
-		output.DisplaySingleLine()	
-		for _, ip := range lowRisk {
-			fmt.Printf("  • %s\n", ip)
-		}
-	}
-	fmt.Println()
+	output.PrintLowRiskSummary(lowRisk)
 
 	// Recommendations
 	output.DisplayRecommendationBanner()	

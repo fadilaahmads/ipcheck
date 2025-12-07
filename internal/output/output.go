@@ -89,3 +89,14 @@ func PrintMediumRiskSummary(mediumRisk []string, threatCache cache.CacheMap) {
 	}
 	fmt.Println()
 }
+
+func PrintLowRiskSummary(lowRisk []string) {
+	fmt.Printf("🟢 LOW RISK (CLEAN): %d\n", len(lowRisk))
+	if len(lowRisk) > 0 && len(lowRisk) <= 10 {
+		DisplaySingleLine()	
+		for _, ip := range lowRisk {
+			fmt.Printf("  • %s\n", ip)
+		}
+	}
+	fmt.Println()
+}
