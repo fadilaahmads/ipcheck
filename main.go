@@ -249,7 +249,7 @@ func main() {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			if err := QueryVirustotal(client, virustotalApiBaseUrl, ip, &result); err != nil {
+			if err := ParsingVirustotal(client, virustotalApiBaseUrl, ip, &result); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
