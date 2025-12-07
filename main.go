@@ -123,7 +123,7 @@ func HandleCachedResult(ip string, cached models.EnhancedCachedResult, state *mo
 	}	
 }
 
-func QueryVirustotal(client *http.Client, apiKey string, ip string, result *models.EnhancedCachedResult) error {	
+func ParsingVirustotal(client *http.Client, apiKey string, ip string, result *models.EnhancedCachedResult) error {	
 	fmt.Printf("  → Querying VirusTotal . . . \n")
 	vtRaw, err := virustotal.QueryVT(client, virustotalApiBaseUrl, apiKey, ip)	
 	if err != nil {
