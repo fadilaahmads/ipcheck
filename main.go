@@ -30,16 +30,6 @@ const (
   abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2"
 	)
 
-type Config struct {
-	FileFlag string
-	IntervalFlag time.Duration
-	DailyFlag int
-	CacheFlag string
-	MalFile string
-	SuspFile string
-	ProviderFlag string
-}
-
 // appendLine appends a single line to a file, creating it if needed
 func appendLine(path string, line string) error {
 	// ensure directory exists
