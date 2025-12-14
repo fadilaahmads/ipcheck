@@ -92,7 +92,7 @@ func HandleCachedResult(ip string, cached models.EnhancedCachedResult, state *mo
 
 func ParsingAbuseIPDB(client *http.Client, apiKey string, ip string, result *models.EnhancedCachedResult) error {
 	fmt.Printf("  → Querying AbuseIPDB...\n")
-	abuseData, err := abuseipdb.QueryAbuseIPDB(client, abuseipdbApiBaseUrl, apiKey, ip)
+	abuseData, err := abuseipdb.FetchAbuseIPDBIPData(client, abuseipdbApiBaseUrl, apiKey, ip)
 	if err != nil {
 		return err
 	}
