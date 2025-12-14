@@ -8,7 +8,7 @@ import (
 	)
 
 // queryVT queries VirusTotal v3 for an IP and returns the raw JSON response
-func QueryVT(client *http.Client, virustotalApiBaseUrl string, apiKey string, ip string) (json.RawMessage, error) {
+func FetchVTIPData(client *http.Client, virustotalApiBaseUrl string, apiKey string, ip string) (json.RawMessage, error) {
 	req, err := http.NewRequest("GET", virustotalApiBaseUrl+"ip_addresses/"+ip, nil)
 	if err != nil {
 		return nil, err
