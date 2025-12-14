@@ -90,27 +90,6 @@ func HandleCachedResult(ip string, cached models.EnhancedCachedResult, state *mo
 	}	
 }
 
-func ParsingVirustotal(client *http.Client, apiKey string, ip string, result *models.EnhancedCachedResult) error {	
-	fmt.Printf("  → Querying VirusTotal . . . \n")
-	vtRaw, err := virustotal.FetchVTIPData(client, virustotalApiBaseUrl, apiKey, ip)	
-	if err != nil {
-		return err
-	}
-
-	malicious, suspicious, err := virustotal.ParseVTAnalysis(vtRaw)
-	if err != nil {
-		return fmt.Errorf("parse error: %w", err)
-	}
-
-	result.VTMaliciousBy = malicious
-	result.VTSuspiciousBy = suspicious
-	result.VTLastQueried = time.Now().Unix()
-	result.VTRaw = vtRaw
-	
-	fmt.Printf("  ✓ VT: Malicious=%d, Suspicious=%d\n", len(malicious), len(suspicious))
-	return nil
-}
-
 func ParsingAbuseIPDB(client *http.Client, apiKey string, ip string, result *models.EnhancedCachedResult) error {
 	fmt.Printf("  → Querying AbuseIPDB...\n")
 	abuseData, err := abuseipdb.QueryAbuseIPDB(client, abuseipdbApiBaseUrl, apiKey, ip)
@@ -174,7 +153,7 @@ func ProcessIP(
 	}
 	// Query VirusTotal
 	if providers.UseVT {	
-		if err := ParsingVirustotal(client, providers.VTAPIKey, ip, &result); err != nil {
+		if err := virustotal.CheckVTIPData(client, providers.VTAPIKey, ip,virustotalApiBaseUrl, &result); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}

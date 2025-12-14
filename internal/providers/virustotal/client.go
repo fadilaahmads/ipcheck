@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
+
+	"ipcheck/internal/models"
 	)
 
 // queryVT queries VirusTotal v3 for an IP and returns the raw JSON response
@@ -33,3 +36,25 @@ func FetchVTIPData(client *http.Client, virustotalApiBaseUrl string, apiKey stri
 	}
 	return json.RawMessage(bodyBytes), nil
 }
+
+func CheckVTIPData(client *http.Client, apiKey string, ip string, virustotalApiBaseUrl string, result *models.EnhancedCachedResult) error {	
+	fmt.Printf("  → Querying VirusTotal . . . \n")
+	vtRaw, err := FetchVTIPData(client, virustotalApiBaseUrl, apiKey, ip)	
+	if err != nil {
+		return err
+	}
+
+	malicious, suspicious, err := ParseVTAnalysis(vtRaw)
+	if err != nil {
+		return fmt.Errorf("parse error: %w", err)
+	}
+
+	result.VTMaliciousBy = malicious
+	result.VTSuspiciousBy = suspicious
+	result.VTLastQueried = time.Now().Unix()
+	result.VTRaw = vtRaw
+	
+	fmt.Printf("  ✓ VT: Malicious=%d, Suspicious=%d\n", len(malicious), len(suspicious))
+	return nil
+}
+
