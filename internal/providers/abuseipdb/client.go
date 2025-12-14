@@ -10,7 +10,7 @@ import (
 	"ipcheck/internal/models"
 )
 
-func FetchAbuseIPDBDIPata(client *http.Client, abuseipdbApiBaseUrl string, apiKey string, ip string) (*models.AbuseCheckData, error){
+func fetchAbuseIPDBIPData(client *http.Client, abuseipdbApiBaseUrl string, apiKey string, ip string) (*models.AbuseCheckData, error){
 
 	params := url.Values{}
 	params.Add("ipAddress", ip)
