@@ -2,7 +2,7 @@ package models
 
 import (
 	"net/http"
-	"time"
+	"time"	
 )
 
 // ============================================================================
@@ -153,10 +153,12 @@ type CliConfig struct {
 
 // Konfigurasi untuk provider threat intelligence
 type ProviderConfig struct {
-	VTAPIKey				string
-	AbuseIPDBAPIKey	string
-	UseVT						bool
-	UseAbuse				bool
+	VTAPIKey				     string
+	VirustotalApiBaseUrl string
+	AbuseIPDBAPIKey	     string
+	AbuseipdbApiBaseUrl  string
+	UseVT						     bool
+	UseAbuse				     bool
 }
 
 type ScanState struct {
