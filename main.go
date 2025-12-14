@@ -77,21 +77,6 @@ func SetupProviders(providerFlag string) (*models.ProviderConfig, error) {
 	}, nil
 }
 
-func CheckVTQuota(client *http.Client, apiKey string) error {
-	vtQuota, err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, apiKey)
-	if err != nil {
-		fmt.Errorf("Error checking VirusTotal quota: %v\n", err)	
-	}
-	vtQuotaTotal, vtQuotaToday, vtQuotaErr := virustotal.ParseVTAPIQuota(vtQuota)
-	if vtQuotaErr != nil {
-		fmt.Errorf("Error parsing VirusTotal quota: %v", vtQuotaErr)	
-	}
-	
-	fmt.Printf("[*] Virustotal Today AvailableQuota: %d | Quota Used Today: %d\n", vtQuotaTotal, vtQuotaToday)
-	fmt.Println()
-	return nil
-}
-
 func HandleCachedResult(ip string, cached models.EnhancedCachedResult, state *models.ScanState)  {
 	fmt.Printf("[cache] %s -> Risk: %s, Should Block: %v\n", ip, cached.RiskLevel, cached.ShouldBlock)
 	// categorized cached result
@@ -302,7 +287,7 @@ func main() {
 	client := &http.Client{Timeout: 30 * time.Second}
 
 	// Check VirusTotal quota
-	if err := CheckVTQuota(client, providers.VTAPIKey); err != nil {
+	if err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, providers.VTAPIKey); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
