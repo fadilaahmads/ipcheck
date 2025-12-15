@@ -12,6 +12,7 @@ import (
 	"ipcheck/internal/models"
 	"ipcheck/internal/orchestrator"
 	"ipcheck/internal/output"
+	"ipcheck/internal/providers"
 	"ipcheck/internal/providers/virustotal"
 	)
 
@@ -37,34 +38,13 @@ func ParseFlags() *models.CliConfig {
 	flag.StringVar(&config.ProviderFlag, "provider", "both", "threat intel provider: vt, abuse, or both")
 	flag.Parse()
 	return config
-}	
-
-func SetupProviders(providerFlag string) (*models.ProviderConfig, error) {
-	vtAPIKey := os.Getenv("VIRUSTOTAL_API_KEY")
-	abuseipdbAPIKey := os.Getenv("ABUSEIPDB_API_KEY")
-
-	useVT := (providerFlag == "vt" || providerFlag == "both") && vtAPIKey != ""
-	useAbuse := (providerFlag == "abuse" || providerFlag == "both")
-
-	if !useVT && !useAbuse {
-		return nil, fmt.Errorf("no API keys set. Set VIRUSTOTAL_API_KEY and/or ABUSEIPDB_API_KEY")
-	}
-
-	return &models.ProviderConfig{
-		VTAPIKey: vtAPIKey,
-		VirustotalApiBaseUrl: virustotalApiBaseUrl,
-		AbuseIPDBAPIKey: abuseipdbAPIKey,
-		AbuseipdbApiBaseUrl: abuseipdbApiBaseUrl,
-		UseVT: useVT,
-		UseAbuse: useAbuse,
-	}, nil
 }
 
 func main() {
 	// flags
 	config := ParseFlags()
   // Get API keys	
-	providers, err := SetupProviders(config.ProviderFlag)
+	providers, err := providers.SetupProviders(config.ProviderFlag, virustotalApiBaseUrl, abuseipdbApiBaseUrl)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
