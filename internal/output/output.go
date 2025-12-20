@@ -63,6 +63,47 @@ func DisplaySummaryBanner(state *models.ScanState, threatCache cache.CacheMap, t
 	fmt.Println("Scan complete.")
 }
 
+func DisplayInterruptedSummary(state *models, threatCache cache.CacheMap, totalIPs []string, config *models.CliConfig)  {
+	fmt.Println("\n═══════════════════════════════════════════════════════════════")
+	fmt.Println("                   INTERRUPTED SCAN SUMMARY")
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Println("⚠️  Scan was interrupted before completion")
+	fmt.Println()	
+
+	totalProcessed := len(state.HighRisk) + len(state.MediumRisk) + len(state.LowRisk)
+	cachedCount := 0
+	for _, ip := range totalIPs {
+		if _, exist := threatCache[ip]; exist {
+			cachedCount++
+		}
+	}
+
+	fmt.Printf("Total IPs in list:      %d\n", len(totalIPs))
+	fmt.Printf("IPs in cache:           %d\n", cachedCount)
+	fmt.Printf("New IPs scanned:        %d\n", totalProcessed)
+	fmt.Printf("API Requests Made:      %d\n\n", state.RequestDone)
+
+	// High Risk (Block)
+	printHighRiskSummary(state.HighRisk, threatCache)
+
+	// Medium Risk (REVIEW)
+	printMediumRiskSummary(state.MediumRisk, threatCache)
+
+	// Low Risk (CLEAN)
+	printLowRiskSummary(state.LowRisk, threatCache)
+
+	// Recommendations
+	if totalProcessed > 0 {
+		DisplayRecommendationBanner(state, config.MalFile, config.SuspFile)
+		DisplayFirewallCommandBanner(state.HighRisk)
+	}
+
+	DisplaySingleLine()
+	fmt.Printf("Cache saved to: %s\n, config.CacheFlag")
+	fmt.Println("✓ All progress has been saved. You can resume the scan by running the command again.")
+	fmt.Println()
+}
+
 func DisplayFirewallCommandBanner(highRisk []string)  {
 	if len(highRisk) == 0 {
 		return
