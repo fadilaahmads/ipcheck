@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
-	"os"	
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 	
 	"ipcheck/internal/cache"
@@ -43,6 +46,15 @@ func ParseFlags() *models.CliConfig {
 func main() {
 	// flags
 	config := ParseFlags()
+	
+	// Setup context for graceful shutdown
+	ctx, cancel :=  context.WithCancel(context.Background())
+
+
+	// Setup signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
   // Get API keys	
 	providers, err := providers.SetupProviders(config.ProviderFlag, virustotalApiBaseUrl, abuseipdbApiBaseUrl)
 	if err != nil {
@@ -75,9 +87,47 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Perform Scan
-	state := orchestrator.ScanIPs(ips, client, providers, config, threatCache)
+	doneChan := make(chan *models.ScanState)
 
-	// Final Summary	
-	output.DisplaySummaryBanner(state, threatCache, ips, config)	
+	// Perform scan in goroutine
+	go func() {
+		state := orchestrator.ScanIPs(ctx, ips, client, providers, config, threatCache)
+		doneChan <- state
+	}()
+
+	// Wait for either completion or interrupt
+	var state *models.ScanState
+	var interrupted bool
+
+	select {
+	case <- sigChan:
+		fmt.Fprintf(os.Stderr, "\n\n[!] Interrupt received. Shutting down gracefully...\n")
+		interrupted = true
+		cancel() // Signal the scanner to stop
+
+		select {
+		case state = <- doneChan:
+			fmt.Fprintf(os.Stderr, "[*] Scanner stopped cleanly\n")
+		case <- time.After(5*time.Second):
+			fmt.Fprintf(os.Stderr, "[!] Timeout waiting for scanner to stop\n")
+			state = &models.ScanState{} // Create empty state
+		}
+
+	case state = <- doneChan:
+		// Normal completion
+		interrupted = false
+	}
+
+	fmt.Fprintf(os.Stderr, "[*] Saving cache...\n")
+	if err := cache.SaveCache(config.CacheFlag, threatCache); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to save cache: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Final Summary
+	if interrupted {
+		output.DisplayInterruptedSummary(state, threatCache, ips, config)
+	} else {
+		output.DisplaySummaryBanner(state, threatCache, ips, config)
+	}
 }

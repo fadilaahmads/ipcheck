@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -78,6 +79,7 @@ func processIP(ip string, processIPConfig *ProcessIPSArgs) (shouldStop bool) {
 
 // ScanIP performs the main scanning loop
 func ScanIPs(
+	ctx context.Context,
 	ips []string, 
 	client *http.Client, 
 	providers *models.ProviderConfig, 
@@ -98,6 +100,15 @@ func ScanIPs(
 	processIPConfig.Mu = &mu
 
 	for _, ip := range ips {
+		// Check for cancellation before processing each IP 
+		select {
+		case <- ctx.Done():
+			fmt.Fprintf(os.Stderr, "\n[*] Shutdown signal received. Stopping scan...\n")
+			return state
+		default:
+			// Contnue processing
+		}
+
 		// Skip private IPs 
 		if input.IsPrivateIP(ip) {
 			fmt.Printf("[skip] private/internal IP: %s\n", ip)
@@ -122,8 +133,17 @@ func ScanIPs(
 
 		// Rate limiting (skip wait on first reuqest)
 		if state.RequestDone > 0 {
-			<-ticker.C 
+			// Use select to allow interruption during rate limit wait
+			select {
+			case <-ctx.Done():
+				fmt.Fprintf(os.Stderr, "\n[*] Shutdown signal received. Stopping scan...\n")
+				return state
+			case <-ticker.C:
+				// Continue after rate limit delay
+			}
 		}
+
+		state.RequestDone++
 
 		// Process IP 
 		if shouldStop := processIP(ip, &processIPConfig); shouldStop {

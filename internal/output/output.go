@@ -63,7 +63,7 @@ func DisplaySummaryBanner(state *models.ScanState, threatCache cache.CacheMap, t
 	fmt.Println("Scan complete.")
 }
 
-func DisplayInterruptedSummary(state *models, threatCache cache.CacheMap, totalIPs []string, config *models.CliConfig)  {
+func DisplayInterruptedSummary(state *models.ScanState, threatCache cache.CacheMap, totalIPs []string, config *models.CliConfig)  {
 	fmt.Println("\n═══════════════════════════════════════════════════════════════")
 	fmt.Println("                   INTERRUPTED SCAN SUMMARY")
 	fmt.Println("═══════════════════════════════════════════════════════════════")
@@ -90,7 +90,7 @@ func DisplayInterruptedSummary(state *models, threatCache cache.CacheMap, totalI
 	printMediumRiskSummary(state.MediumRisk, threatCache)
 
 	// Low Risk (CLEAN)
-	printLowRiskSummary(state.LowRisk, threatCache)
+	printLowRiskSummary(state.LowRisk)
 
 	// Recommendations
 	if totalProcessed > 0 {
