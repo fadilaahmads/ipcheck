@@ -116,3 +116,6 @@ A: Use the `-provider` flag. For example, to use only AbuseIPDB, run `./ipcheck 
 **Q: I'm getting "no valid IPs found" but my file has IPs.**
 
 A: Ensure your IPs are correctly formatted and separated by newlines, commas, spaces, or tabs. The tool will silently skip any invalid entries.
+
+## > [!NOTE]
+> Some of the earliest commit message are in Indonesian Language. As the project became public in 20 December 2025, the commit message will be using English Language.
