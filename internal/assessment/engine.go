@@ -18,7 +18,7 @@ func CalculateRiskLevel(result *models.EnhancedCachedResult) {
 		vtScore = 100
 	}
 
-	// Combined score (weighted average: Virustotal 40%, AbuseIPDB 60%)
+	// Combined score (weighted average: Virustotal 60%, AbuseIPDB 40%)
 	combinedScore := int(float64(vtScore)*0.6 + float64(result.AbuseScore)*0.4)
 
 	// Decission Logic
