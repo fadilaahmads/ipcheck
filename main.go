@@ -17,6 +17,7 @@ import (
 	"ipcheck/internal/output"
 	"ipcheck/internal/providers"
 	"ipcheck/internal/providers/virustotal"
+	"ipcheck/internal/ratelimit"
 	)
 
 // Configurable defaults
@@ -87,11 +88,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	rateLimiter := ratelimit.NewTickerRateLimiter(config.IntervalFlag)
 	doneChan := make(chan *models.ScanState)
 
 	// Perform scan in goroutine
 	go func() {
-		state := orchestrator.ScanIPs(ctx, ips, client, providers, config, threatCache)
+		state := orchestrator.ScanIPs(ctx, ips, client, providers, config, threatCache, rateLimiter)
 		doneChan <- state
 	}()
 

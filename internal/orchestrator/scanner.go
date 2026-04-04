@@ -15,6 +15,7 @@ import (
 	"ipcheck/internal/output"
 	"ipcheck/internal/providers/abuseipdb"	
 	"ipcheck/internal/providers/virustotal"
+	"ipcheck/internal/ratelimit"
 )
 
 type ProcessIPSArgs struct {	
@@ -85,9 +86,9 @@ func ScanIPs(
 	providers *models.ProviderConfig, 
 	config *models.CliConfig, 
 	threatCache cache.CacheMap,
+	rateLimiter ratelimit.RateLimiter,
 ) *models.ScanState {
-	ticker := time.NewTicker(config.IntervalFlag)
-	defer ticker.Stop()
+	defer rateLimiter.Stop()
 
 	var mu sync.Mutex
 	state := &models.ScanState{}
@@ -133,13 +134,9 @@ func ScanIPs(
 
 		// Rate limiting (skip wait on first reuqest)
 		if state.RequestDone > 0 {
-			// Use select to allow interruption during rate limit wait
-			select {
-			case <-ctx.Done():
-				fmt.Fprintf(os.Stderr, "\n[*] Shutdown signal received. Stopping scan...\n")
+			if err := rateLimiter.Wait(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "\n[*] Shutdown signal received during rate limit wait: %v. Stopping scan...\n", err)
 				return state
-			case <-ticker.C:
-				// Continue after rate limit delay
 			}
 		}
 
