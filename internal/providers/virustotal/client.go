@@ -1,6 +1,7 @@
 package virustotal 
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
