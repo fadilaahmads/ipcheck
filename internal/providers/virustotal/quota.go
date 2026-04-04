@@ -33,16 +33,16 @@ func FetchVTAPIQuota(client *http.Client, virustotalApiBaseUrl string, apiKey st
 	return json.RawMessage(bodyBytes), nil
 }
 
-func CheckVTAPIQuota(client *http.Client,virustotalApiBaseUrl string, apiKey string) error {
+func CheckVTAPIQuota(client *http.Client, virustotalApiBaseUrl string, apiKey string) error {
 	vtQuota, err := FetchVTAPIQuota(client, virustotalApiBaseUrl, apiKey)
 	if err != nil {
-		fmt.Errorf("Error checking VirusTotal quota: %v\n", err)	
+		return fmt.Errorf("error checking VirusTotal quota: %v", err)
 	}
 	vtQuotaTotal, vtQuotaToday, vtQuotaErr := ParseVTAPIQuota(vtQuota)
 	if vtQuotaErr != nil {
-		fmt.Errorf("Error parsing VirusTotal quota: %v", vtQuotaErr)	
+		return fmt.Errorf("error parsing VirusTotal quota: %v", vtQuotaErr)
 	}
-	
+
 	fmt.Printf("[*] Virustotal Today AvailableQuota: %d | Quota Used Today: %d\n", vtQuotaTotal, vtQuotaToday)
 	fmt.Println()
 	return nil
