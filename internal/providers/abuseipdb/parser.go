@@ -1,6 +1,7 @@
 package abuseipdb
 
 import (
+	"context"
 	"fmt"
 	"encoding/json"
 	"net/http"
@@ -9,9 +10,9 @@ import (
 	"ipcheck/internal/models"
 )
 
-func ParseAbuseIPDBIPData(client *http.Client, apiKey string, ip string, abuseipdbApiBaseUrl string, result *models.EnhancedCachedResult) error {
+func ParseAbuseIPDBIPData(ctx context.Context, client *http.Client, apiKey string, ip string, abuseipdbApiBaseUrl string, result *models.EnhancedCachedResult) error {
 	fmt.Printf("  → Querying AbuseIPDB...\n")
-	abuseData, err := fetchAbuseIPDBIPData(client, abuseipdbApiBaseUrl, apiKey, ip)
+	abuseData, err := fetchAbuseIPDBIPData(ctx, client, abuseipdbApiBaseUrl, apiKey, ip)
 	if err != nil {
 		return err
 	}
