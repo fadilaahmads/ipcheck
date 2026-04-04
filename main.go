@@ -82,10 +82,12 @@ func main() {
 
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	// Check VirusTotal quota
-	if err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, providers.VTAPIKey); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	// Check VirusTotal quota if used
+	if providers.UseVT {
+		if err := virustotal.CheckVTAPIQuota(client, virustotalApiBaseUrl, providers.VTAPIKey); err != nil {
+			fmt.Fprintln(os.Stderr, "VirusTotal quota error:", err)
+			os.Exit(1)
+		}
 	}
 
 	rateLimiter := ratelimit.NewTickerRateLimiter(config.IntervalFlag)
