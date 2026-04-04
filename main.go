@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 	
-	"ipcheck/internal/cache"
 	"ipcheck/internal/input"
 	"ipcheck/internal/models"
 	"ipcheck/internal/orchestrator"
@@ -18,6 +17,7 @@ import (
 	"ipcheck/internal/providers"
 	"ipcheck/internal/providers/virustotal"
 	"ipcheck/internal/ratelimit"
+	"ipcheck/internal/repositories"
 	)
 
 // Configurable defaults
@@ -28,7 +28,7 @@ const (
 	maliciousOutFile = "malicious.txt"
 	suspiciousOutFile= "suspicious.txt"	
 	virustotalApiBaseUrl = "https://www.virustotal.com/api/v3/"
-  abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2"
+	abuseipdbApiBaseUrl = "https://api.abuseipdb.com/api/v2"
 	)
 
 func ParseFlags() *models.CliConfig {
@@ -73,12 +73,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// load cache
-	threatCache, err := cache.LoadCache(config.CacheFlag)
+	// Initialize repository
+	repo, err := repositories.NewJSONRepository(config.CacheFlag)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "failed to load cache:", err)
+		fmt.Fprintln(os.Stderr, "failed to initialize repository:", err)
 		os.Exit(1)
 	}
+	defer repo.Close()
 
 	client := &http.Client{Timeout: 30 * time.Second}
 
@@ -95,7 +96,7 @@ func main() {
 
 	// Perform scan in goroutine
 	go func() {
-		state := orchestrator.ScanIPs(ctx, ips, client, providers, config, threatCache, rateLimiter)
+		state := orchestrator.ScanIPs(ctx, ips, client, providers, config, repo, rateLimiter)
 		doneChan <- state
 	}()
 
@@ -122,10 +123,18 @@ func main() {
 		interrupted = false
 	}
 
-	fmt.Fprintf(os.Stderr, "[*] Saving cache...\n")
-	if err := cache.SaveCache(config.CacheFlag, threatCache); err != nil {
-		fmt.Fprintf(os.Stderr, "[!] Failed to save cache: %v\n", err)
+	fmt.Fprintf(os.Stderr, "[*] Saving data...\n")
+	if err := repo.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to save data: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Fetch all data for final summary
+	allResultsList, _ := repo.GetAllIPs(ctx)
+	// Convert slice back to map for the current summary display functions
+	threatCache := make(map[string]models.EnhancedCachedResult)
+	for _, res := range allResultsList {
+		threatCache[res.IP] = res
 	}
 
 	// Final Summary
