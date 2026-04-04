@@ -99,7 +99,7 @@ func DisplayInterruptedSummary(state *models.ScanState, threatCache cache.CacheM
 	}
 
 	DisplaySingleLine()
-	fmt.Printf("Cache saved to: %s\n, config.CacheFlag")
+	fmt.Printf("Cache saved to: %s\n", config.CacheFlag)
 	fmt.Println("✓ All progress has been saved. You can resume the scan by running the command again.")
 	fmt.Println()
 }
