@@ -18,46 +18,40 @@ import (
 	"ipcheck/internal/ratelimit"
 )
 
-type ProcessIPSArgs struct {	
-	Client *http.Client
-	Providers *models.ProviderConfig
-	Config *models.CliConfig	
+type ProcessIPSArgs struct {
+	Client      *http.Client
+	Providers   *models.ProviderConfig
+	Config      *models.CliConfig
 	ThreatCache cache.CacheMap
-	VirustotalApiBaseUrl string
-	AbuseipdbApibaseUrl string
-	Mu *sync.Mutex
+	Mu          *sync.Mutex
 }
 
 // ProcessIP queries threat intelligence providers and assess a single IP
-func processIP(ip string, processIPConfig *ProcessIPSArgs) (shouldStop bool) {	
-	client := processIPConfig.Client
-	providers := processIPConfig.Providers
-	config := processIPConfig.Config	
-	threatCache := processIPConfig.ThreatCache
-	virustotalApiBaseUrl := processIPConfig.Providers.VirustotalApiBaseUrl
-	abuseipdbApiBaseUrl := processIPConfig.Providers.AbuseipdbApiBaseUrl
-	mu := processIPConfig.Mu
+func processIP(ctx context.Context, ip string, args *ProcessIPSArgs) (*models.EnhancedCachedResult, error) {
+	client := args.Client
+	providers := args.Providers
+	config := args.Config
+	threatCache := args.ThreatCache
+	mu := args.Mu
 
 	fmt.Printf("[query] %s\n", ip)
 
 	result := models.EnhancedCachedResult{
-		IP: ip,
+		IP:          ip,
 		LastUpdated: time.Now().Unix(),
 	}
 	// Query VirusTotal
-	if providers.UseVT {	
-		if err := virustotal.CheckVTIPData(client, providers.VTAPIKey, ip,virustotalApiBaseUrl, &result); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+	if providers.UseVT {
+		if err := virustotal.CheckVTIPData(ctx, client, providers.VTAPIKey, ip, providers.VirustotalApiBaseUrl, &result); err != nil {
+			return nil, fmt.Errorf("VirusTotal error for %s: %v", ip, err)
 		}
 	}
 
 	// Query AbuseIPDB
 	if providers.UseAbuse {
-		if err := abuseipdb.ParseAbuseIPDBIPData(client, providers.AbuseIPDBAPIKey, ip, abuseipdbApiBaseUrl, &result); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}	
+		if err := abuseipdb.ParseAbuseIPDBIPData(ctx, client, providers.AbuseIPDBAPIKey, ip, providers.AbuseipdbApiBaseUrl, &result); err != nil {
+			return nil, fmt.Errorf("AbuseIPDB error for %s: %v", ip, err)
+		}
 	}
 
 	assessment.CalculateRiskLevel(&result)
@@ -65,26 +59,26 @@ func processIP(ip string, processIPConfig *ProcessIPSArgs) (shouldStop bool) {
 	// write outputs & update cache
 	mu.Lock()
 	threatCache[ip] = result
-		
+
 	// Categorized and write to files
 	if err := output.SaveResultToFile(&result, config.MalFile, config.SuspFile); err != nil {
 		fmt.Fprintf(os.Stderr, "   ✗ Error writing output file: %v\n", err)
-	}	
+	}
 	mu.Unlock()
 
 	// Display summary for this IP
 	output.DisplaySingleIPSummary(&result)
 
-	return false
+	return &result, nil
 }
 
 // ScanIP performs the main scanning loop
 func ScanIPs(
 	ctx context.Context,
-	ips []string, 
-	client *http.Client, 
-	providers *models.ProviderConfig, 
-	config *models.CliConfig, 
+	ips []string,
+	client *http.Client,
+	providers *models.ProviderConfig,
+	config *models.CliConfig,
 	threatCache cache.CacheMap,
 	rateLimiter ratelimit.RateLimiter,
 ) *models.ScanState {
@@ -93,17 +87,18 @@ func ScanIPs(
 	var mu sync.Mutex
 	state := &models.ScanState{}
 
-	processIPConfig := ProcessIPSArgs{}
-	processIPConfig.Client = client
-	processIPConfig.Providers = providers
-	processIPConfig.Config = config
-	processIPConfig.ThreatCache = threatCache
-	processIPConfig.Mu = &mu
+	processIPConfig := ProcessIPSArgs{
+		Client:      client,
+		Providers:   providers,
+		Config:      config,
+		ThreatCache: threatCache,
+		Mu:          &mu,
+	}
 
 	for _, ip := range ips {
 		// Check for cancellation before processing each IP 
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			fmt.Fprintf(os.Stderr, "\n[*] Shutdown signal received. Stopping scan...\n")
 			return state
 		default:
@@ -143,9 +138,23 @@ func ScanIPs(
 		state.RequestDone++
 
 		// Process IP 
-		if shouldStop := processIP(ip, &processIPConfig); shouldStop {
-			break
+		result, err := processIP(ctx, ip, &processIPConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "   ✗ %v\n", err)
+			continue // Skip to next IP instead of exiting
 		}
+
+		// Update state for summary
+		mu.Lock()
+		switch result.RiskLevel {
+		case "HIGH":
+			state.HighRisk = append(state.HighRisk, ip)
+		case "MEDIUM":
+			state.MediumRisk = append(state.MediumRisk, ip)
+		case "LOW":
+			state.LowRisk = append(state.LowRisk, ip)
+		}
+		mu.Unlock()
 	}
 
 	return state
