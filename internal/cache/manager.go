@@ -1,5 +1,8 @@
 package cache
 
+// OBSOLETE: This file's functionality has been integrated directly into ScanIPs 
+// in internal/orchestrator/scanner.go. This file will be removed in a future update.
+
 import (
 	"fmt"
 

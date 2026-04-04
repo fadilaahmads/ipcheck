@@ -1,5 +1,9 @@
 package cache
 
+// OBSOLETE: The logic in this file is being migrated to internal/repositories.
+// New code should use the Repository interface. This file will be removed
+// once the migration to a full SQL database is complete.
+
 import (
 	"encoding/json"
 	"io"
