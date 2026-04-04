@@ -5,25 +5,23 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 	
 	"ipcheck/internal/assessment"
-	"ipcheck/internal/cache"
 	"ipcheck/internal/input"
 	"ipcheck/internal/models"
 	"ipcheck/internal/output"
 	"ipcheck/internal/providers/abuseipdb"	
 	"ipcheck/internal/providers/virustotal"
 	"ipcheck/internal/ratelimit"
+	"ipcheck/internal/repositories"
 )
 
 type ProcessIPSArgs struct {
 	Client      *http.Client
 	Providers   *models.ProviderConfig
 	Config      *models.CliConfig
-	ThreatCache cache.CacheMap
-	Mu          *sync.Mutex
+	Repo        repositories.Repository
 }
 
 // ProcessIP queries threat intelligence providers and assess a single IP
@@ -31,8 +29,7 @@ func processIP(ctx context.Context, ip string, args *ProcessIPSArgs) (*models.En
 	client := args.Client
 	providers := args.Providers
 	config := args.Config
-	threatCache := args.ThreatCache
-	mu := args.Mu
+	repo := args.Repo
 
 	fmt.Printf("[query] %s\n", ip)
 
@@ -56,15 +53,15 @@ func processIP(ctx context.Context, ip string, args *ProcessIPSArgs) (*models.En
 
 	assessment.CalculateRiskLevel(&result)
 
-	// write outputs & update cache
-	mu.Lock()
-	threatCache[ip] = result
+	// write outputs & update repository
+	if err := repo.SaveIP(ctx, &result); err != nil {
+		fmt.Fprintf(os.Stderr, "   ✗ Error saving result to repository: %v\n", err)
+	}
 
-	// Categorized and write to files
+	// Categorized and write to files (keeping this for manual log comparison as requested)
 	if err := output.SaveResultToFile(&result, config.MalFile, config.SuspFile); err != nil {
 		fmt.Fprintf(os.Stderr, "   ✗ Error writing output file: %v\n", err)
 	}
-	mu.Unlock()
 
 	// Display summary for this IP
 	output.DisplaySingleIPSummary(&result)
@@ -79,20 +76,18 @@ func ScanIPs(
 	client *http.Client,
 	providers *models.ProviderConfig,
 	config *models.CliConfig,
-	threatCache cache.CacheMap,
+	repo repositories.Repository,
 	rateLimiter ratelimit.RateLimiter,
 ) *models.ScanState {
 	defer rateLimiter.Stop()
 
-	var mu sync.Mutex
 	state := &models.ScanState{}
 
 	processIPConfig := ProcessIPSArgs{
 		Client:      client,
 		Providers:   providers,
 		Config:      config,
-		ThreatCache: threatCache,
-		Mu:          &mu,
+		Repo:        repo,
 	}
 
 	for _, ip := range ips {
@@ -117,13 +112,23 @@ func ScanIPs(
 			break
 		}
 
-		// Check cache
-		mu.Lock()
-		cached, exists := threatCache[ip]
-		mu.Unlock()
+		// Check repository (cache)
+		cached, exists, err := repo.GetIP(ctx, ip)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "   ✗ Error checking repository: %v\n", err)
+		}
 
 		if exists {
-			cache.HandleCachedResult(ip, cached, state)
+			fmt.Printf("[cache] %s -> Risk: %s, Should Block: %v\n", ip, cached.RiskLevel, cached.ShouldBlock)
+			// Update state for summary
+			switch cached.RiskLevel {
+			case "HIGH":
+				state.HighRisk = append(state.HighRisk, ip)
+			case "MEDIUM":
+				state.MediumRisk = append(state.MediumRisk, ip)
+			case "LOW":
+				state.LowRisk = append(state.LowRisk, ip)
+			}
 			continue
 		}
 
@@ -145,7 +150,6 @@ func ScanIPs(
 		}
 
 		// Update state for summary
-		mu.Lock()
 		switch result.RiskLevel {
 		case "HIGH":
 			state.HighRisk = append(state.HighRisk, ip)
@@ -154,7 +158,6 @@ func ScanIPs(
 		case "LOW":
 			state.LowRisk = append(state.LowRisk, ip)
 		}
-		mu.Unlock()
 	}
 
 	return state
