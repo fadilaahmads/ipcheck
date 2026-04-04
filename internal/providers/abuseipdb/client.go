@@ -10,14 +10,14 @@ import (
 	"ipcheck/internal/models"
 )
 
-func fetchAbuseIPDBIPData(client *http.Client, abuseipdbApiBaseUrl string, apiKey string, ip string) (*models.AbuseCheckData, error){
+func fetchAbuseIPDBIPData(ctx context.Context, client *http.Client, abuseipdbApiBaseUrl string, apiKey string, ip string) (*models.AbuseCheckData, error){
 
 	params := url.Values{}
 	params.Add("ipAddress", ip)
 	params.Add("maxAgeInDays", "90")
 	params.Add("verbose", "")
 	
-	req, err := http.NewRequest("GET", abuseipdbApiBaseUrl+"/check?"+params.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", abuseipdbApiBaseUrl+"/check?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}

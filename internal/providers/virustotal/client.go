@@ -10,14 +10,14 @@ import (
 	"ipcheck/internal/models"
 	)
 
-// queryVT queries VirusTotal v3 for an IP and returns the raw JSON response
-func FetchVTIPData(client *http.Client, virustotalApiBaseUrl string, apiKey string, ip string) (json.RawMessage, error) {
-	req, err := http.NewRequest("GET", virustotalApiBaseUrl+"ip_addresses/"+ip, nil)
+// FetchVTIPData queries VirusTotal v3 for an IP and returns the raw JSON response
+func FetchVTIPData(ctx context.Context, client *http.Client, virustotalApiBaseUrl string, apiKey string, ip string) (json.RawMessage, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", virustotalApiBaseUrl+"ip_addresses/"+ip, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("x-apikey", apiKey) // VT v3 uses x-apikey header OR Authorization Bearer; using x-apikey is fine
+	req.Header.Set("x-apikey", apiKey)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -27,7 +27,6 @@ func FetchVTIPData(client *http.Client, virustotalApiBaseUrl string, apiKey stri
 	if err != nil {
 		return nil, err
 	}
-	// 429 handling - caller can inspect resp.StatusCode for rate limit info
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return nil, fmt.Errorf("rate limited: %s", string(bodyBytes))
 	}
@@ -37,9 +36,9 @@ func FetchVTIPData(client *http.Client, virustotalApiBaseUrl string, apiKey stri
 	return json.RawMessage(bodyBytes), nil
 }
 
-func CheckVTIPData(client *http.Client, apiKey string, ip string, virustotalApiBaseUrl string, result *models.EnhancedCachedResult) error {	
+func CheckVTIPData(ctx context.Context, client *http.Client, apiKey string, ip string, virustotalApiBaseUrl string, result *models.EnhancedCachedResult) error {
 	fmt.Printf("  → Querying VirusTotal . . . \n")
-	vtRaw, err := FetchVTIPData(client, virustotalApiBaseUrl, apiKey, ip)	
+	vtRaw, err := FetchVTIPData(ctx, client, virustotalApiBaseUrl, apiKey, ip)
 	if err != nil {
 		return err
 	}
