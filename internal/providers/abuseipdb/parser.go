@@ -22,6 +22,9 @@ func ParseAbuseIPDBIPData(ctx context.Context, client *http.Client, apiKey strin
 	result.AbuseIsTor = abuseData.IsTor
 	result.AbuseCountry = abuseData.CountryCode
 	result.AbuseISP = abuseData.ISP
+	result.AbuseUsageType = abuseData.UsageType
+	result.AbuseDomain = abuseData.Domain
+	result.IsWhitelisted = abuseData.IsWhitelisted
 	result.AbuseLastQueried = time.Now().Unix()
 
 	rawBytes, err := json.Marshal(abuseData)
