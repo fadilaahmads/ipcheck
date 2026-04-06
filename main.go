@@ -75,10 +75,19 @@ func main() {
 	}
 
 	// Initialize repository
-	repo, err := repositories.NewJSONRepository(config.CacheFlag)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "failed to initialize repository:", err)
-		os.Exit(1)
+	var repo repositories.Repository
+	if config.DbConn != "" {
+		repo, err = repositories.NewPostgresRepository(ctx, config.DbConn)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to initialize PostgreSQL repository:", err)
+			os.Exit(1)
+		}
+	} else {
+		repo, err = repositories.NewJSONRepository(config.CacheFlag)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to initialize JSON repository:", err)
+			os.Exit(1)
+		}
 	}
 	defer repo.Close()
 
