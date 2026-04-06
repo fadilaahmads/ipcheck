@@ -154,3 +154,60 @@ func (r *PostgresRepository) GetIP(ctx context.Context, ip string) (*models.Enha
 
 	return &res, true, nil
 }
+
+// GetAllIPs retrieves all stored IP reputation data from the repository.
+func (r *PostgresRepository) GetAllIPs(ctx context.Context) ([]models.EnhancedCachedResult, error) {
+	const query = `
+		SELECT 
+			ip, risk_level, should_block, vt_malicious_count, vt_suspicious_count,
+			vt_malicious_by, vt_suspicious_by,
+			abuse_score, abuse_total_reports, is_tor, country_code, isp, 
+			usage_type, domain, is_whitelisted, vt_last_queried, abuse_last_queried,
+			last_updated_at, raw_vt_data, raw_abuse_data
+		FROM ip_reputation;
+	`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all IPs: %w", err)
+	}
+	defer rows.Close()
+
+	var results []models.EnhancedCachedResult
+	for rows.Next() {
+		var res models.EnhancedCachedResult
+		var vtTime, abuseTime, updateTime time.Time
+		var vtCount, suspCount int
+
+		err := rows.Scan(
+			&res.IP, &res.RiskLevel, &res.ShouldBlock, &vtCount, &suspCount,
+			&res.VTMaliciousBy, &res.VTSuspiciousBy,
+			&res.AbuseScore, &res.AbuseTotalReports, &res.AbuseIsTor,
+			&res.AbuseCountry, &res.AbuseISP, &res.AbuseUsageType,
+			&res.AbuseDomain, &res.IsWhitelisted,
+			&vtTime, &abuseTime, &updateTime,
+			&res.VTRaw, &res.AbuseRaw,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan ip row: %w", err)
+		}
+
+		res.VTLastQueried = vtTime.Unix()
+		res.AbuseLastQueried = abuseTime.Unix()
+		res.LastUpdated = updateTime.Unix()
+
+		results = append(results, res)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error during row iteration: %w", err)
+	}
+
+	return results, nil
+}
+
+// Close gracefully closes the database connection pool
+func (r *PostgresRepository) Close() error {
+	r.pool.Close()
+	return nil
+}
