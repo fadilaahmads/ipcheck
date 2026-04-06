@@ -4,12 +4,25 @@ import (
 	"fmt"
 	"os"
 
+	"ipcheck/internal/input"
 	"ipcheck/internal/models"
 )
 
 func SetupProviders(providerFlag string, VTAPIBaseUrl string, AbuseIPDBBaseUrl string) (*models.ProviderConfig, error) {
-	vtAPIKey := os.Getenv("VIRUSTOTAL_API_KEY")
-	abuseipdbAPIKey := os.Getenv("ABUSEIPDB_API_KEY")
+	// Load .env file
+	env, _ := input.ParseEnvFile(".env")
+
+	// Get VT API Key (Priority: .env > os.Getenv)
+	vtAPIKey := env["VIRUSTOTAL_API_KEY"]
+	if vtAPIKey == "" {
+		vtAPIKey = os.Getenv("VIRUSTOTAL_API_KEY")
+	}
+
+	// Get AbuseIPDB API Key (Priority: .env > os.Getenv)
+	abuseipdbAPIKey := env["ABUSEIPDB_API_KEY"]
+	if abuseipdbAPIKey == "" {
+		abuseipdbAPIKey = os.Getenv("ABUSEIPDB_API_KEY")
+	}
 
 	useVT := (providerFlag == "vt" || providerFlag == "both") && vtAPIKey != ""
 	useAbuse := (providerFlag == "abuse" || providerFlag == "both")
