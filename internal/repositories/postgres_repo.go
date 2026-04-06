@@ -49,18 +49,21 @@ func (r *PostgresRepository) SaveIP(ctx context.Context, result *models.Enhanced
 	const upsertReputation = `
 		INSERT INTO ip_reputation (
 			ip, risk_level, should_block, vt_malicious_count, vt_suspicious_count,
+			vt_malicious_by, vt_suspicious_by,
 			abuse_score, abuse_total_reports, is_tor, country_code, isp, 
 			usage_type, domain, is_whitelisted, vt_last_queried, abuse_last_queried,
 			last_updated_at, raw_vt_data, raw_abuse_data
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 
-			CURRENT_TIMESTAMP, $16, $17
+			$16, $17, CURRENT_TIMESTAMP, $18, $19
 		)
 		ON CONFLICT (ip) DO UPDATE SET
 			risk_level = EXCLUDED.risk_level,
 			should_block = EXCLUDED.should_block,
 			vt_malicious_count = EXCLUDED.vt_malicious_count,
 			vt_suspicious_count = EXCLUDED.vt_suspicious_count,
+			vt_malicious_by = EXCLUDED.vt_malicious_by,
+			vt_suspicious_by = EXCLUDED.vt_suspicious_by,
 			abuse_score = EXCLUDED.abuse_score,
 			abuse_total_reports = EXCLUDED.abuse_total_reports,
 			is_tor = EXCLUDED.is_tor,
@@ -83,6 +86,7 @@ func (r *PostgresRepository) SaveIP(ctx context.Context, result *models.Enhanced
 	_, err := r.pool.Exec(ctx, upsertReputation,
 		result.IP, result.RiskLevel, result.ShouldBlock, 
 		len(result.VTMaliciousBy), len(result.VTSuspiciousBy),
+		result.VTMaliciousBy, result.VTSuspiciousBy,
 		result.AbuseScore, result.AbuseTotalReports, result.AbuseIsTor,
 		result.AbuseCountry, result.AbuseISP, result.AbuseUsageType,
 		result.AbuseDomain, result.IsWhitelisted,
