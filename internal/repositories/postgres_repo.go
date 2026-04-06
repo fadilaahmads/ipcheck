@@ -115,6 +115,42 @@ func (r *PostgresRepository) SaveIP(ctx context.Context, result *models.Enhanced
 
 // GetIP retrieves the latest reputation data for an IP.
 func (r *PostgresRepository) GetIP(ctx context.Context, ip string) (*models.EnhancedCachedResult, bool, error) {
-	// ... to be implemented next
-	return nil, false, nil
+	const query = `
+		SELECT 
+			ip, risk_level, should_block, vt_malicious_count, vt_suspicious_count,
+			vt_malicious_by, vt_suspicious_by,
+			abuse_score, abuse_total_reports, is_tor, country_code, isp, 
+			usage_type, domain, is_whitelisted, vt_last_queried, abuse_last_queried,
+			last_updated_at, raw_vt_data, raw_abuse_data
+		FROM ip_reputation
+		WHERE ip = $1;
+	`
+
+	var res models.EnhancedCachedResult
+	var vtTime, abuseTime, updateTime time.Time
+	var vtCount, suspCount int // temporary holders for counts if needed, but we use slices
+
+	err := r.pool.QueryRow(ctx, query, ip).Scan(
+		&res.IP, &res.RiskLevel, &res.ShouldBlock, &vtCount, &suspCount,
+		&res.VTMaliciousBy, &res.VTSuspiciousBy,
+		&res.AbuseScore, &res.AbuseTotalReports, &res.AbuseIsTor,
+		&res.AbuseCountry, &res.AbuseISP, &res.AbuseUsageType,
+		&res.AbuseDomain, &res.IsWhitelisted,
+		&vtTime, &abuseTime, &updateTime,
+		&res.VTRaw, &res.AbuseRaw,
+	)
+
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to get ip_reputation: %w", err)
+	}
+
+	// Convert times back to Unix int64
+	res.VTLastQueried = vtTime.Unix()
+	res.AbuseLastQueried = abuseTime.Unix()
+	res.LastUpdated = updateTime.Unix()
+
+	return &res, true, nil
 }
