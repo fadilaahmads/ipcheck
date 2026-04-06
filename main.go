@@ -45,9 +45,27 @@ func ParseFlags() *models.CliConfig {
 	return config
 }
 
-func main() {
-	// flags
+func ResolveConfig() *models.CliConfig {
 	config := ParseFlags()
+
+	// Load .env file (if exists)
+	env, err := input.ParseEnvFile(".env")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Error parsing .env file: %v\n", err)
+	}
+
+	// Priority: .env file > CLI flag
+	// Only override if the .env value is not empty
+	if dbURL, exists := env["IPCHECK_DB_URL"]; exists && dbURL != "" {
+		config.DbConn = dbURL
+	}
+
+	return config
+}
+
+func main() {
+	// Load and resolve configuration
+	config := ResolveConfig()
 	
 	// Setup context for graceful shutdown
 	ctx, cancel :=  context.WithCancel(context.Background())
