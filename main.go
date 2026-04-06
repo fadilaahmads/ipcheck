@@ -40,6 +40,7 @@ func ParseFlags() *models.CliConfig {
 	flag.StringVar(&config.MalFile, "mal", maliciousOutFile, "malicious output file")
 	flag.StringVar(&config.SuspFile, "susp", suspiciousOutFile, "suspicious output file")
 	flag.StringVar(&config.ProviderFlag, "provider", "both", "threat intel provider: vt, abuse, or both")
+	flag.StringVar(&config.DbConn, "db", "", "PostgreSQL connection string (e.g., postgres://user:pass@localhost:5432/dbname)")
 	flag.Parse()
 	return config
 }
