@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS ip_reputation (
     -- Analysis Summary (Promoted for ultra-fast filtering)
     vt_malicious_count  INTEGER DEFAULT 0,
     vt_suspicious_count INTEGER DEFAULT 0,
+    vt_malicious_by     TEXT[], -- List of vendors flagged as malicious
+    vt_suspicious_by    TEXT[], -- List of vendors flagged as suspicious
     abuse_score         INTEGER DEFAULT 0,
     abuse_total_reports INTEGER DEFAULT 0,
     
