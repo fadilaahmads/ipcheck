@@ -137,6 +137,8 @@ type AbuseCheckData struct {
 	IsTor                bool   `json:"isTor"`
 	CountryCode          string `json:"countryCode"`
 	ISP                  string `json:"isp"`
+	UsageType            string `json:"usageType"`
+	Domain               string `json:"domain"`
 	IsWhitelisted        bool   `json:"isWhitelisted"`
 }
 
@@ -149,6 +151,7 @@ type CliConfig struct {
 	MalFile				string
 	SuspFile			string
 	ProviderFlag	string
+	DbConn        string
 }
 
 // Konfigurasi untuk provider threat intelligence
