@@ -18,6 +18,9 @@ type EnhancedCachedResult struct {
 	AbuseIsTor       bool            `json:"abuse_is_tor,omitempty"`
 	AbuseCountry     string          `json:"abuse_country,omitempty"`
 	AbuseISP          string          `json:"abuse_isp,omitempty"`
+	AbuseUsageType    string          `json:"abuse_usage_type,omitempty"`
+	AbuseDomain       string          `json:"abuse_domain,omitempty"`
+	IsWhitelisted     bool            `json:"is_whitelisted,omitempty"`
 	AbuseLastQueried int64           `json:"abuse_last_queried,omitempty"`
 	AbuseRaw         json.RawMessage `json:"abuse_raw,omitempty"`
 	// Combined assessment
