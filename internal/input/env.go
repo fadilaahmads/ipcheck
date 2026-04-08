@@ -39,6 +39,11 @@ func ParseEnvFile(path string) (map[string]string, error) {
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 		
+		// Skip if key is empty (malformed line like "=value")
+		if key == "" {
+			continue
+		}
+		
 		// Remove quotes if present
 		value = strings.Trim(value, "\"'")
 		
