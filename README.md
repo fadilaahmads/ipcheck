@@ -1,23 +1,25 @@
 # IP Reputation Checker
 
-A Go-based command-line tool for SOC analysts and security professionals to automate IP address reputation checking against multiple threat intelligence platforms. This tool helps streamline the process of analyzing suspicious IPs found in SIEM alerts by batch querying APIs and categorizing results.
+A Go-based command-line tool for SOC analysts and security professionals to automate IP address reputation checking against multiple threat intelligence platforms. Designed as a building block for **SOAR (Security Orchestration, Automation, and Response)** stacks.
 
 ## Features
 
 - **Multi-provider Support**: Check IP addresses against VirusTotal and AbuseIPDB.
-- **Batch IP Processing**: Check multiple IP addresses from file or stdin.
-- **Smart Caching**: Avoids redundant API calls with a persistent JSON cache.
-- **Rate Limiting**: Respects API limits with configurable intervals.
-- **Private IP Filtering**: Automatically skips RFC 1918 private IP ranges.
-- **Categorized Output**: Separates results into malicious and suspicious categories.
-- **Flexible Input**: Supports various input formats (newline, comma, space, tab separated).
+- **SOAR-Ready Architecture**: Uses a Repository pattern to support both local JSON and high-concurrency PostgreSQL backends.
+- **SOC-Grade Scoring**: Aggressive risk assessment logic with volumetric boosting based on report counts and vendor consensus.
+- **Smart Caching**: Avoids redundant API calls with persistent storage (JSON or SQL).
+- **Environment Configuration**: Securely manage credentials via `.env` files or system environment variables.
+- **Rate Limiting**: Respects API limits with configurable intervals and daily caps.
+- **Private IP Filtering**: Automatically skips RFC 1918 private IP ranges and loopbacks.
+- **Historical Tracking**: When using PostgreSQL, every scan is recorded for time-series analysis of IP reputation.
 
 ## Installation
 
 1.  **Prerequisites**:
-    *   Go 1.16 or higher
-    *   VirusTotal API key (free or premium)
+    *   Go 1.24 or higher
+    *   VirusTotal API key
     *   AbuseIPDB API key
+    *   PostgreSQL (Optional, for high-concurrency usage)
 
 2.  **Build from source**:
     ```bash
@@ -25,51 +27,64 @@ A Go-based command-line tool for SOC analysts and security professionals to auto
     cd ipcheck
     make build
     ```
-    This will create the `ipcheck` binary in the current directory.
+
+## Configuration
+
+The tool prioritizes configuration in the following order: `.env` file > CLI Flags > Environment Variables.
+
+Create a `.env` file in the project root:
+```bash
+# API Keys
+VIRUSTOTAL_API_KEY="your_vt_key"
+ABUSEIPDB_API_KEY="your_abuse_key"
+
+# Database (Optional)
+IPCHECK_DB_URL="postgres://user:pass@localhost:5432/ipcheck_db"
+```
+
+## Database Setup (PostgreSQL)
+
+If you are using PostgreSQL for centralized storage, initialize the schema:
+```bash
+make migrate DB_CONN="postgres://user:pass@localhost:5432/ipcheck_db"
+```
 
 ## Quick Start
 
-1.  **Set API Keys**:
-    Set your API keys as environment variables:
+1.  **Basic Scan (JSON Cache):**
     ```bash
-    export VIRUSTOTAL_API_KEY="your_virustotal_api_key"
-    export ABUSEIPDB_API_KEY="your_abuseipdb_api_key"
+    ./ipcheck -file ips.txt
     ```
 
-2.  **Run a Scan**:
-    You can run `ipcheck` with a file containing IPs or by piping them from stdin.
+2.  **SQL-Backed Scan:**
+    ```bash
+    ./ipcheck -db "postgres://..." -file ips.txt
+    ```
 
-    *   **From a file:**
-        Create a file named `ips.txt` with one or more IPs per line:
-        ```
-        8.8.8.8
-        1.1.1.1
-        ```
-        Then run:
-        ```bash
-        ./ipcheck -file ips.txt
-        ```
-
-    *   **From stdin:**
-        ```bash
-        echo "8.8.8.8 1.1.1.1" | ./ipcheck
-        ```
+3.  **Piped Input:**
+    ```bash
+    echo "8.8.8.8" | ./ipcheck
+    ```
 
 ## Usage/Flags
-
-```
-./ipcheck [options]
-```
 
 | Flag | Description | Default |
 |---|---|---|
 | `-file` | Path to a file with IPs. If empty, reads from stdin. | `""` |
-| `-provider` | Threat intelligence provider: `vt` (VirusTotal), `abuse` (AbuseIPDB), or `both`. | `"both"` |
-| `-interval` | Interval between requests for rate limiting. | `15s` |
+| `-db` | PostgreSQL connection string. Overrides JSON cache. | `""` |
+| `-provider` | Threat intel provider: `vt`, `abuse`, or `both`. | `"both"` |
+| `-interval` | Interval between requests (Rate Limiting). | `15s` |
 | `-daily` | Daily request cap per run. | `50` |
-| `-cache` | Path to the cache JSON file. | `"threat_intel_cache.json"` |
-| `-mal` | Malicious output file. | `"malicious.txt"` |
-| `-susp` | Suspicious output file. | `"suspicious.txt"` |
+| `-cache` | Path to the cache JSON file (if not using SQL). | `"threat_intel_cache.json"` |
+| `-mal` | Malicious output file (txt). | `"malicious.txt"` |
+| `-susp` | Suspicious output file (txt). | `"suspicious.txt"` |
+
+## Testing
+
+The project includes a comprehensive suite of unit tests for models, the assessment engine, and configuration parsers.
+```bash
+go test ./...
+```
 
 ## Contributor
 
@@ -103,19 +118,11 @@ SOFTWARE.
 
 **Q: I'm getting "API key not set" errors.**
 
-A: Make sure you have set both `VIRUSTOTAL_API_KEY` and `ABUSEIPDB_API_KEY` environment variables.
+A: Ensure you have set your API keys in the `.env` file or environment variables.
 
-**Q: The tool is running slowly.**
+**Q: How do I migrate my existing JSON cache to PostgreSQL?**
 
-A: The default request interval is 15 seconds to comply with the free tier of VirusTotal's API. You can adjust this with the `-interval` flag if you have a premium key.
-
-**Q: How do I choose which provider to use?**
-
-A: Use the `-provider` flag. For example, to use only AbuseIPDB, run `./ipcheck -provider abuse`.
-
-**Q: I'm getting "no valid IPs found" but my file has IPs.**
-
-A: Ensure your IPs are correctly formatted and separated by newlines, commas, spaces, or tabs. The tool will silently skip any invalid entries.
+A: Currently, migration is manual. You can use the `-db` flag for new scans, and they will populate the database while referencing your JSON cache is disabled.
 
 ## > [!NOTE]
 > Some of the earliest commit message are in Indonesian Language. As the project became public in 20 December 2025, the commit message will be using English Language.
