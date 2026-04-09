@@ -66,12 +66,11 @@ func TestCalculateRiskLevel(t *testing.T) {
 			name: "High Risk - Combined Score with Volumetric Bonus",
 			input: &models.EnhancedCachedResult{
 				VTMaliciousBy:     []string{"v1", "v2"}, // 40
-				AbuseScore:        70,                   // 70
+				AbuseScore:        80,                   // 80 (Trigger HIGH)
 				AbuseTotalReports: 100,                  // 15 point bonus
-				// Score = (40*0.6) + (70*0.4) + 15 = 24 + 28 + 15 = 67
-				// Almost 70. Let's add 1 vendor.
+				// Score = (40*0.6) + (80*0.4) + 15 = 24 + 32 + 15 = 71
 			},
-			expectedRisk:  "HIGH", // Hits via "len(VTMaliciousBy) >= 3" trigger
+			expectedRisk:  "HIGH",
 			expectedBlock: true,
 		},
 		{
